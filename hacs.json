@@ -1,7 +1,5 @@
 {
   "name": "ROI Tracker",
   "render_readme": true,
-  "homeassistant": "2024.4.0",
-  "zip_release": true,
-  "filename": "roi_tracker.zip"
+  "homeassistant": "2024.4.0"
 }
