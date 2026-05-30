@@ -18,6 +18,7 @@ const TXT = {
   de: {
     total_return: "Gesamtrückfluss",
     savings: "Ersparnis",
+    battery_savings: "Batterie-Ersparnis",
     revenue: "Einspeiseertrag",
     remaining_investment: "Offener Restbetrag",
     amortization: "Amortisation",
@@ -33,6 +34,7 @@ const TXT = {
   en: {
     total_return: "Total return",
     savings: "Savings",
+    battery_savings: "Battery savings",
     revenue: "Feed-in revenue",
     remaining_investment: "Remaining",
     amortization: "Amortization",
@@ -51,6 +53,7 @@ const TXT = {
 const KEYS = [
   "total_return",
   "savings",
+  "battery_savings",
   "revenue",
   "remaining_investment",
   "amortization",
@@ -146,6 +149,7 @@ class RoiTrackerCard extends HTMLElement {
 
     const total = this._value(ent.total_return);
     const savings = this._value(ent.savings);
+    const batterySavings = this._value(ent.battery_savings);
     const revenue = this._value(ent.revenue);
     const remaining = this._value(ent.remaining_investment);
     const amort = this._value(ent.amortization);
@@ -165,6 +169,8 @@ class RoiTrackerCard extends HTMLElement {
       );
     };
     addRow(t.savings, this._fmtMoney(savings));
+    if (batterySavings != null && batterySavings !== 0)
+      addRow(t.battery_savings, this._fmtMoney(batterySavings));
     if (revenue != null && revenue !== 0) addRow(t.revenue, this._fmtMoney(revenue));
     addRow(t.remaining_investment, this._fmtMoney(remaining));
     addRow(t.breakeven_days, this._fmtBreakeven(breakeven, t));

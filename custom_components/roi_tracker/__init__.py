@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant
 from .const import DOMAIN
 from .coordinator import RoiTrackerCoordinator
 from .frontend import async_register_card
+from .services import async_setup_services, async_unload_services
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
@@ -28,12 +29,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: RoiConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+
+    # Services (z. B. reset) einmalig registrieren.
+    async_setup_services(hass)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: RoiConfigEntry) -> bool:
     """Entlädt einen ROI-Rechner."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unloaded:
+        async_unload_services(hass)
+    return unloaded
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: RoiConfigEntry) -> None:

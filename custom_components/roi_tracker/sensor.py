@@ -22,6 +22,7 @@ from .const import (
     CONF_TEMPLATE,
     DOMAIN,
     SENSOR_AMORTIZATION,
+    SENSOR_BATTERY_SAVINGS,
     SENSOR_BREAKEVEN_DAYS,
     SENSOR_REMAINING,
     SENSOR_REVENUE,
@@ -60,6 +61,15 @@ SENSOR_DESCRIPTIONS: tuple[RoiSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL_INCREASING,
         icon="mdi:piggy-bank",
         value_fn=lambda r: r.savings,
+    ),
+    RoiSensorDescription(
+        key=SENSOR_BATTERY_SAVINGS,
+        translation_key=SENSOR_BATTERY_SAVINGS,
+        native_unit_of_measurement=CURRENCY,
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:battery-charging",
+        value_fn=lambda r: r.battery_savings,
     ),
     RoiSensorDescription(
         key=SENSOR_REVENUE,

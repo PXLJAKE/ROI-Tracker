@@ -86,12 +86,19 @@
     "sensor": {
       "total_return": { "name": "Total return" },
       "savings": { "name": "Savings" },
+      "battery_savings": { "name": "Battery savings" },
       "revenue": { "name": "Feed-in revenue" },
       "remaining_investment": { "name": "Remaining investment" },
       "amortization": { "name": "Amortization" },
       "roi_percent": { "name": "ROI" },
       "breakeven_days": { "name": "Days to break-even" },
       "self_sufficiency": { "name": "Self-sufficiency" }
+    }
+  },
+  "services": {
+    "reset": {
+      "name": "Reset",
+      "description": "Resets a ROI calculator to zero. All accumulated values and the stored state are cleared."
     }
   }
 }

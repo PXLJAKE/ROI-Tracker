@@ -103,6 +103,57 @@ def test_self_sufficiency() -> None:
     assert r.self_sufficiency_percent == 75.0
 
 
+def test_battery_discharge_savings() -> None:
+    st = RoiState()
+    calculator.update(
+        st, investment=10000, now=START, battery_discharge=0, price_per_unit=0.30
+    )
+    r = calculator.update(
+        st,
+        investment=10000,
+        now=START,
+        battery_discharge=50,
+        price_per_unit=0.30,
+    )
+    # 50 kWh aus Batterie * 0,30 € = 15,00 € separate Batterie-Ersparnis
+    assert r.battery_savings == 15.0
+    # zählt in den Gesamtrückfluss mit hinein
+    assert r.total_return == 15.0
+
+
+def test_battery_not_double_counted_with_cost_sensor() -> None:
+    st = RoiState()
+    calculator.update(
+        st, investment=1000, now=START, cost_total=0, battery_discharge=0,
+        price_per_unit=0.30,
+    )
+    r = calculator.update(
+        st, investment=1000, now=START, cost_total=10, battery_discharge=100,
+        price_per_unit=0.30,
+    )
+    # Kosten-Sensor enthält Batterie bereits -> keine separate Batterie-Ersparnis
+    assert r.battery_savings == 0.0
+    assert r.savings == 10.0
+
+
+def test_battery_counts_towards_self_sufficiency() -> None:
+    st = RoiState()
+    calculator.update(
+        st, investment=1, now=START, consumption=0, export=0, battery_discharge=0
+    )
+    r = calculator.update(
+        st,
+        investment=1,
+        now=START,
+        consumption=50,
+        battery_discharge=25,
+        export=25,
+        price_per_unit=0.3,
+    )
+    # (50 Verbrauch + 25 Batterie) / (75 + 25 Einspeisung) = 75 %
+    assert r.self_sufficiency_percent == 75.0
+
+
 def test_baseline_rate_for_ev() -> None:
     st = RoiState()
     calculator.update(st, investment=5000, now=START, consumption=0, baseline_rate=0.12)

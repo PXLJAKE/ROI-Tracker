@@ -108,6 +108,7 @@ TEMPLATE_DEFAULTS: Final = {
 # --- Sensor-Kennungen (entity suffixes) -------------------------------------
 
 SENSOR_SAVINGS: Final = "savings"  # Ersparnis durch Eigenverbrauch (€)
+SENSOR_BATTERY_SAVINGS: Final = "battery_savings"  # Ersparnis durch Batterie (€)
 SENSOR_REVENUE: Final = "revenue"  # Einnahmen Einspeisung/Abgabe (€)
 SENSOR_TOTAL_RETURN: Final = "total_return"  # kumulierter Rückfluss (€)
 SENSOR_AMORTIZATION: Final = "amortization"  # Amortisation (%)
@@ -119,6 +120,10 @@ SENSOR_ROI_PERCENT: Final = "roi_percent"  # ROI (%) inkl. Gewinn über Investit
 # --- Sonstiges --------------------------------------------------------------
 
 DEFAULT_UPDATE_INTERVAL_MINUTES: Final = 5
+
+# --- Services ---------------------------------------------------------------
+
+SERVICE_RESET: Final = "reset"
 
 # Persistenter Zustand im ConfigEntry (runtime-data / store)
 STORAGE_VERSION: Final = 1

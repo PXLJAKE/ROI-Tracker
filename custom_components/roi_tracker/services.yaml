@@ -1,0 +1,10 @@
+reset:
+  name: Zurücksetzen
+  description: >-
+    Setzt einen ROI-Rechner auf null zurück (alle kumulierten Werte und der
+    gespeicherte Zustand werden gelöscht). Die Berechnung startet danach neu.
+  target:
+    device:
+      integration: roi_tracker
+    entity:
+      integration: roi_tracker

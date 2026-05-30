@@ -18,6 +18,7 @@ class RoiState:
     # Zuletzt gesehene Zählerstände (zur Delta-Bildung)
     last_consumption: float | None = None
     last_export: float | None = None
+    last_battery_discharge: float | None = None
     # Zuletzt gesehene "fertige" €-Zählerstände
     last_cost_total: float | None = None
     last_reward_total: float | None = None
@@ -25,10 +26,12 @@ class RoiState:
     # Kumulierte Geldbeträge
     savings: float = 0.0  # gespart durch Eigenverbrauch (€)
     revenue: float = 0.0  # eingenommen durch Einspeisung/Abgabe (€)
+    battery_savings: float = 0.0  # gespart durch Batterie-Entladung (€)
 
     # Kumulierte Mengen (für Autarkie/Statistik)
     total_consumption: float = 0.0
     total_export: float = 0.0
+    total_battery_discharge: float = 0.0
 
     first_update: str | None = None  # ISO-Zeitstempel der ersten Messung
 
@@ -49,6 +52,7 @@ class RoiResult:
 
     savings: float = 0.0
     revenue: float = 0.0
+    battery_savings: float = 0.0
     total_return: float = 0.0
     remaining_investment: float = 0.0
     amortization_percent: float = 0.0
@@ -81,6 +85,7 @@ def update(
     now: datetime,
     consumption: float | None = None,
     export: float | None = None,
+    battery_discharge: float | None = None,
     price_per_unit: float | None = None,
     reward_per_unit: float | None = None,
     cost_total: float | None = None,
@@ -90,13 +95,19 @@ def update(
     """Aktualisiert ``state`` anhand neuer Messwerte und gibt das Ergebnis zurück.
 
     Eingaben (alle optional, je nach Vorlage/Konfiguration):
-      consumption    – kumulierte selbst genutzte Menge (kWh/km/...)
-      export         – kumulierte eingespeiste/abgegebene Menge
-      price_per_unit – aktueller Bezugspreis €/Einheit (fester Wert ODER Sensor)
-      reward_per_unit– aktuelle Vergütung €/Einheit
-      cost_total     – fertiger kumulierter €-Kostensensor (statt price*menge)
-      reward_total   – fertiger kumulierter €-Ertragssensor (statt reward*menge)
-      baseline_rate  – Kosten der Alt-Lösung €/Einheit (Vergleich, z. B. E-Auto)
+      consumption       – kumulierte selbst genutzte Menge (kWh/km/...)
+      export            – kumulierte eingespeiste/abgegebene Menge
+      battery_discharge – kumulierte aus der Batterie entnommene Menge (kWh)
+      price_per_unit    – aktueller Bezugspreis €/Einheit (fester Wert ODER Sensor)
+      reward_per_unit   – aktuelle Vergütung €/Einheit
+      cost_total        – fertiger kumulierter €-Kostensensor (statt price*menge)
+      reward_total      – fertiger kumulierter €-Ertragssensor (statt reward*menge)
+      baseline_rate     – Kosten der Alt-Lösung €/Einheit (Vergleich, z. B. E-Auto)
+
+    Batterie: Jede aus der Batterie entnommene kWh ersetzt eine kWh Netzbezug
+    und wird daher mit dem Bezugspreis als zusätzliche Ersparnis gewertet. Die
+    Ladung (battery_charge) verursacht keine direkten Kosten – sie stammt i. d. R.
+    aus PV-Überschuss – und wird hier bewusst nicht als Ausgabe gerechnet.
     """
     if state.first_update is None:
         state.first_update = now.isoformat()
@@ -128,8 +139,20 @@ def update(
             state.revenue += d_units * reward_per_unit
         state.last_export = export
 
+    # --- Ersparnis durch Batterie-Entladung ---------------------------------
+    # Jede kWh aus der Batterie ersetzt Netzbezug -> Ersparnis zum Bezugspreis.
+    # Bei fertigem Kosten-Sensor (cost_total) ist die Batterie i. d. R. bereits
+    # darin enthalten -> dann nicht doppelt zählen.
+    if battery_discharge is not None and cost_total is None:
+        d_units = _delta(battery_discharge, state.last_battery_discharge)
+        state.total_battery_discharge += d_units
+        rate = baseline_rate if baseline_rate is not None else price_per_unit
+        if rate is not None:
+            state.battery_savings += d_units * rate
+        state.last_battery_discharge = battery_discharge
+
     # --- Kennzahlen ---------------------------------------------------------
-    total_return = state.savings + state.revenue
+    total_return = state.savings + state.battery_savings + state.revenue
     remaining = max(investment - total_return, 0.0)
     amortization = (total_return / investment * 100.0) if investment > 0 else 0.0
     roi_percent = (
@@ -149,15 +172,18 @@ def update(
             elif remaining <= 0:
                 breakeven_days = 0.0
 
-    # Autarkiegrad (nur sinnvoll, wenn Verbrauch & Einspeisung bekannt sind)
+    # Autarkiegrad (nur sinnvoll, wenn Verbrauch & Einspeisung bekannt sind).
+    # Batterie-Entladung zählt als selbst genutzte Energie.
     self_sufficiency: float | None = None
-    denom = state.total_consumption + state.total_export
+    self_used = state.total_consumption + state.total_battery_discharge
+    denom = self_used + state.total_export
     if denom > 0:
-        self_sufficiency = state.total_consumption / denom * 100.0
+        self_sufficiency = self_used / denom * 100.0
 
     return RoiResult(
         savings=round(state.savings, 2),
         revenue=round(state.revenue, 2),
+        battery_savings=round(state.battery_savings, 2),
         total_return=round(total_return, 2),
         remaining_investment=round(remaining, 2),
         amortization_percent=round(amortization, 1),
@@ -170,6 +196,7 @@ def update(
         attributes={
             "total_consumption": round(state.total_consumption, 3),
             "total_export": round(state.total_export, 3),
+            "total_battery_discharge": round(state.total_battery_discharge, 3),
             "first_update": state.first_update,
         },
     )

@@ -33,8 +33,9 @@ Ersparnis, Amortisation und Restlaufzeit – inklusive einer schönen Dashboard-
 
 | Sensor | Einheit | Beschreibung |
 |---|---|---|
-| Gesamtrückfluss | € | Ersparnis + Einspeiseertrag, kumuliert |
+| Gesamtrückfluss | € | Ersparnis + Batterie-Ersparnis + Einspeiseertrag, kumuliert |
 | Ersparnis | € | gesparter Netzbezug durch Eigenverbrauch |
+| Ersparnis durch Batterie | € | gesparter Netzbezug durch Batterie-Entladung |
 | Einspeiseertrag | € | Einnahmen aus Einspeisung/Abgabe |
 | Offener Restbetrag | € | noch nicht amortisierter Teil der Investition |
 | Amortisation | % | wie viel der Investition zurückgeflossen ist |
@@ -91,6 +92,27 @@ entities:
   amortization: sensor.roi_e_auto_amortisation
   savings: sensor.roi_e_auto_ersparnis
   breakeven_days: sensor.roi_e_auto_restlaufzeit_bis_break_even
+```
+
+## 🔋 Batterie
+
+Wählst du bei der PV-Vorlage einen **Batterie-Entlade-Sensor** (kumulierte kWh),
+zählt jede aus der Batterie entnommene kWh als zusätzliche Ersparnis zum
+Bezugspreis (sie ersetzt Netzbezug) und fließt in den **Autarkiegrad** ein. Die
+Ladung wird bewusst nicht als Ausgabe gerechnet, da sie i. d. R. aus
+PV-Überschuss stammt. Nutzt du einen fertigen €-Kosten-Sensor (z. B. Tibber),
+ist die Batterie meist bereits enthalten – dann wird sie nicht doppelt gezählt.
+
+## 🔄 Zurücksetzen
+
+Über den Service **`roi_tracker.reset`** (Ziel: das Gerät der Anlage) setzt du
+einen Rechner auf null zurück – alle kumulierten Werte und der gespeicherte
+Zustand werden gelöscht und die Messung beginnt neu.
+
+```yaml
+action: roi_tracker.reset
+target:
+  device_id: <Geräte-ID der Anlage>
 ```
 
 ## 🧮 Wie wird gerechnet?

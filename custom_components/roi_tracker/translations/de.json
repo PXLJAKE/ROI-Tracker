@@ -86,12 +86,19 @@
     "sensor": {
       "total_return": { "name": "Gesamtrückfluss" },
       "savings": { "name": "Ersparnis" },
+      "battery_savings": { "name": "Ersparnis durch Batterie" },
       "revenue": { "name": "Einspeiseertrag" },
       "remaining_investment": { "name": "Offener Restbetrag" },
       "amortization": { "name": "Amortisation" },
       "roi_percent": { "name": "ROI" },
       "breakeven_days": { "name": "Restlaufzeit bis Break-Even" },
       "self_sufficiency": { "name": "Autarkiegrad" }
+    }
+  },
+  "services": {
+    "reset": {
+      "name": "Zurücksetzen",
+      "description": "Setzt einen ROI-Rechner auf null zurück. Alle kumulierten Werte und der gespeicherte Zustand werden gelöscht."
     }
   }
 }

@@ -15,6 +15,7 @@ from . import calculator
 from .calculator import RoiResult, RoiState
 from .const import (
     CONF_BASELINE_RATE,
+    CONF_BATTERY_DISCHARGE_SENSOR,
     CONF_CONSUMPTION_SENSOR,
     CONF_COST_SENSOR,
     CONF_EXPORT_SENSOR,
@@ -85,6 +86,7 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
 
         consumption = self._read_number(cfg.get(CONF_CONSUMPTION_SENSOR))
         export = self._read_number(cfg.get(CONF_EXPORT_SENSOR))
+        battery_discharge = self._read_number(cfg.get(CONF_BATTERY_DISCHARGE_SENSOR))
         baseline_rate = cfg.get(CONF_BASELINE_RATE)
         baseline_rate = float(baseline_rate) if baseline_rate not in (None, "") else None
 
@@ -116,6 +118,7 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
             now=dt_util.utcnow(),
             consumption=consumption,
             export=export,
+            battery_discharge=battery_discharge,
             price_per_unit=price_per_unit,
             reward_per_unit=reward_per_unit,
             cost_total=cost_total,
