@@ -14,6 +14,7 @@
         "data": {
           "name": "Asset name",
           "investment": "Investment cost (€)",
+          "start_date": "Start date (optional, can be in the past)",
           "production_sensor": "Sensor: produced/generated amount",
           "consumption_sensor": "Sensor: self-consumption / used amount",
           "export_sensor": "Sensor: exported/delivered amount",
@@ -30,6 +31,7 @@
         },
         "data_description": {
           "investment": "One-time investment that should pay off over time.",
+          "start_date": "Optionally a date in the past. The calculation then starts retroactively from that day using the stored sensor history. Exact with a fixed price or € cost sensor; requires the sensors to have long-term statistics since that date.",
           "baseline_rate": "What the previous solution would have cost per unit (e.g. petrol cost per kWh-equivalent for an EV).",
           "cost_sensor": "A sensor already denominated in € such as Tibber's \"accumulated cost\" – its delta is used directly as savings."
         }
@@ -47,6 +49,7 @@
         "data": {
           "name": "Asset name",
           "investment": "Investment cost (€)",
+          "start_date": "Start date (optional, can be in the past)",
           "production_sensor": "Sensor: produced/generated amount",
           "consumption_sensor": "Sensor: self-consumption / used amount",
           "export_sensor": "Sensor: exported/delivered amount",
@@ -99,6 +102,16 @@
     "reset": {
       "name": "Reset",
       "description": "Resets a ROI calculator to zero. All accumulated values and the stored state are cleared."
+    },
+    "recalculate": {
+      "name": "Recalculate retroactively",
+      "description": "Resets a ROI calculator and recalculates it retroactively from the stored sensor history.",
+      "fields": {
+        "start_date": {
+          "name": "Start date",
+          "description": "Date to calculate from retroactively (optional; otherwise the start date configured on the asset)."
+        }
+      }
     }
   }
 }

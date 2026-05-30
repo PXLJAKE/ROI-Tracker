@@ -8,3 +8,23 @@ reset:
       integration: roi_tracker
     entity:
       integration: roi_tracker
+
+recalculate:
+  name: Rückwirkend neu berechnen
+  description: >-
+    Setzt einen ROI-Rechner zurück und berechnet ihn rückwirkend aus der
+    gespeicherten Sensor-Historie neu – ab dem angegebenen Datum oder, falls
+    keines angegeben ist, ab dem in der Anlage konfigurierten Startdatum.
+  target:
+    device:
+      integration: roi_tracker
+    entity:
+      integration: roi_tracker
+  fields:
+    start_date:
+      name: Startdatum
+      description: Datum, ab dem rückwirkend gerechnet werden soll (optional).
+      required: false
+      example: "2025-01-01"
+      selector:
+        date:

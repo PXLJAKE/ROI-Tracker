@@ -14,6 +14,7 @@
         "data": {
           "name": "Name der Anlage",
           "investment": "Anschaffungskosten (€)",
+          "start_date": "Startdatum (optional, auch rückwirkend)",
           "production_sensor": "Sensor: erzeugte/erbrachte Menge",
           "consumption_sensor": "Sensor: Eigenverbrauch / genutzte Menge",
           "export_sensor": "Sensor: eingespeiste/abgegebene Menge",
@@ -30,6 +31,7 @@
         },
         "data_description": {
           "investment": "Einmalige Investitionssumme, die sich amortisieren soll.",
+          "start_date": "Optional ein Datum in der Vergangenheit. Die Berechnung startet dann rückwirkend ab diesem Tag aus der gespeicherten Sensor-Historie. Funktioniert exakt bei festem Preis oder €-Kosten-Sensor; setzt voraus, dass die Sensoren seit dem Datum Langzeit-Statistiken haben.",
           "baseline_rate": "Was die frühere Lösung pro Einheit gekostet hätte (z. B. Benzinkosten je kWh-Äquivalent beim E-Auto).",
           "cost_sensor": "Bereits in € geführter Sensor wie Tibbers „accumulated cost“ – dann wird das Delta direkt als Ersparnis genutzt."
         }
@@ -47,6 +49,7 @@
         "data": {
           "name": "Name der Anlage",
           "investment": "Anschaffungskosten (€)",
+          "start_date": "Startdatum (optional, auch rückwirkend)",
           "production_sensor": "Sensor: erzeugte/erbrachte Menge",
           "consumption_sensor": "Sensor: Eigenverbrauch / genutzte Menge",
           "export_sensor": "Sensor: eingespeiste/abgegebene Menge",
@@ -99,6 +102,16 @@
     "reset": {
       "name": "Zurücksetzen",
       "description": "Setzt einen ROI-Rechner auf null zurück. Alle kumulierten Werte und der gespeicherte Zustand werden gelöscht."
+    },
+    "recalculate": {
+      "name": "Rückwirkend neu berechnen",
+      "description": "Setzt einen ROI-Rechner zurück und berechnet ihn rückwirkend aus der gespeicherten Sensor-Historie neu.",
+      "fields": {
+        "start_date": {
+          "name": "Startdatum",
+          "description": "Datum, ab dem rückwirkend gerechnet werden soll (optional; sonst das in der Anlage konfigurierte Startdatum)."
+        }
+      }
     }
   }
 }

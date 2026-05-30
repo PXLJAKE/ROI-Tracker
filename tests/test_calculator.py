@@ -169,6 +169,23 @@ def test_baseline_rate_for_ev() -> None:
     assert r.savings == 120.0
 
 
+def test_retroactive_baseline_seed() -> None:
+    # Simuliert "seed from history": Startdatum mit vorbelegter Basislinie.
+    start = datetime(2026, 2, 19, 0, 0, 0)
+    st = RoiState()
+    st.first_update = start.isoformat()
+    st.last_consumption = 1000.0  # Zählerstand am Startdatum
+
+    now = datetime(2026, 5, 30, 0, 0, 0)
+    r = calculator.update(
+        st, investment=10000, now=now, consumption=3000, price_per_unit=0.30
+    )
+    # 2000 kWh seit Startdatum * 0,30 € = 600 €
+    assert r.savings == 600.0
+    # Break-even wird aus der vergangenen Laufzeit hochgerechnet
+    assert r.breakeven_days is not None and r.breakeven_days > 0
+
+
 def _run_all() -> None:
     fns = [v for k, v in globals().items() if k.startswith("test_") and callable(v)]
     for fn in fns:

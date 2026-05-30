@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -13,6 +13,7 @@ from homeassistant.util import dt as dt_util
 
 from . import calculator
 from .calculator import RoiResult, RoiState
+from .history import async_get_sensor_value_at
 from .const import (
     CONF_BASELINE_RATE,
     CONF_BATTERY_DISCHARGE_SENSOR,
@@ -26,6 +27,7 @@ from .const import (
     CONF_REWARD_FIXED,
     CONF_REWARD_MODE,
     CONF_REWARD_SENSOR,
+    CONF_START_DATE,
     DEFAULT_UPDATE_INTERVAL_MINUTES,
     DOMAIN,
     PRICE_MODE_COST_SENSOR,
@@ -53,6 +55,8 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
             hass, STORAGE_VERSION, STORAGE_KEY.format(entry_id=entry.entry_id)
         )
         self._state: RoiState = RoiState()
+        # Wird vom recalculate-Service gesetzt, um das Config-Startdatum zu übersteuern.
+        self._override_start_date: str | None = None
 
     @property
     def config(self) -> dict:
@@ -60,9 +64,95 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
         return {**self.entry.data, **self.entry.options}
 
     async def async_load_state(self) -> None:
-        """Persistenten Zustand beim Setup laden."""
+        """Persistenten Zustand beim Setup laden.
+
+        Existiert noch kein gespeicherter Zustand und ist ein Startdatum gesetzt,
+        wird die Basislinie rückwirkend aus der Sensor-Historie gesetzt.
+        """
         stored = await self._store.async_load()
-        self._state = RoiState.from_dict(stored)
+        if stored:
+            self._state = RoiState.from_dict(stored)
+            return
+
+        self._state = RoiState()
+        await self.async_seed_from_history()
+        await self._async_save_state()
+
+    def _parse_start_date(self):
+        """Parst das Startdatum (Override oder Konfiguration) zu einem datetime."""
+        raw = self._override_start_date or self.config.get(CONF_START_DATE)
+        if not raw:
+            return None
+        try:
+            dt = dt_util.parse_datetime(raw)
+            if dt is None:
+                # Reines Datum (YYYY-MM-DD) -> auf Tagesbeginn setzen.
+                date = dt_util.parse_date(raw)
+                if date is None:
+                    return None
+                dt = datetime(date.year, date.month, date.day)
+            return dt_util.as_utc(
+                dt if dt.tzinfo else dt.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
+            )
+        except (ValueError, TypeError):
+            _LOGGER.warning("Ungültiges Startdatum: %s", raw)
+            return None
+
+    async def async_seed_from_history(self) -> bool:
+        """Setzt die Basislinie auf die Zählerstände zum Startdatum.
+
+        Dadurch erscheint beim ersten Lauf die seit dem Startdatum aufgelaufene
+        Ersparnis. Gibt True zurück, wenn mindestens ein Wert gesetzt wurde.
+        """
+        start = self._parse_start_date()
+        if start is None:
+            return False
+
+        cfg = self.config
+        self._state.first_update = start.isoformat()
+        seeded = False
+
+        async def _seed(conf_key: str, attr: str) -> None:
+            nonlocal seeded
+            entity_id = cfg.get(conf_key)
+            value = await async_get_sensor_value_at(self.hass, entity_id, start)
+            if value is not None:
+                setattr(self._state, attr, value)
+                seeded = True
+                _LOGGER.debug(
+                    "Basislinie %s = %s (Stand %s) aus Historie gesetzt",
+                    entity_id,
+                    value,
+                    start.date(),
+                )
+
+        await _seed(CONF_CONSUMPTION_SENSOR, "last_consumption")
+        await _seed(CONF_EXPORT_SENSOR, "last_export")
+        await _seed(CONF_BATTERY_DISCHARGE_SENSOR, "last_battery_discharge")
+        await _seed(CONF_COST_SENSOR, "last_cost_total")
+        await _seed(CONF_REWARD_SENSOR, "last_reward_total")
+
+        if not seeded:
+            _LOGGER.info(
+                "Startdatum gesetzt, aber keine Historie für die Sensoren gefunden "
+                "(zu kurze Aufbewahrung oder Sensoren ohne state_class?). Die "
+                "Berechnung startet ab jetzt."
+            )
+        return seeded
+
+    async def async_recalculate_from(self, start_date: str | None = None) -> None:
+        """Setzt den Rechner zurück und startet rückwirkend ab einem Datum neu.
+
+        Wird vom recalculate-Service genutzt. Ohne ``start_date`` wird das in der
+        Konfiguration hinterlegte Startdatum verwendet.
+        """
+        self._state = RoiState()
+        await self._store.async_remove()
+        if start_date:
+            self._override_start_date = start_date
+        await self.async_seed_from_history()
+        await self._async_save_state()
+        await self.async_request_refresh()
 
     async def _async_save_state(self) -> None:
         await self._store.async_save(self._state.to_dict())

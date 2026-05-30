@@ -124,6 +124,8 @@ DEFAULT_UPDATE_INTERVAL_MINUTES: Final = 5
 # --- Services ---------------------------------------------------------------
 
 SERVICE_RESET: Final = "reset"
+SERVICE_RECALCULATE: Final = "recalculate"
+ATTR_START_DATE: Final = "start_date"
 
 # Persistenter Zustand im ConfigEntry (runtime-data / store)
 STORAGE_VERSION: Final = 1

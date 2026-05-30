@@ -103,6 +103,30 @@ Ladung wird bewusst nicht als Ausgabe gerechnet, da sie i. d. R. aus
 PV-Überschuss stammt. Nutzt du einen fertigen €-Kosten-Sensor (z. B. Tibber),
 ist die Batterie meist bereits enthalten – dann wird sie nicht doppelt gezählt.
 
+## ⏳ Rückwirkend rechnen (Startdatum)
+
+Im Setup kannst du ein optionales **Startdatum** angeben – auch in der
+Vergangenheit. ROI Tracker liest dann beim Anlegen aus den **gespeicherten
+Langzeit-Statistiken** deiner Sensoren den Zählerstand zu diesem Datum und nimmt
+ihn als Basislinie. So erscheint sofort die seit dem Startdatum aufgelaufene
+Ersparnis, statt erst „ab jetzt" zu zählen.
+
+- **Exakt** bei festem Preis oder fertigem €-Kosten-Sensor.
+- Bei einem **dynamischen Preis-Sensor** ist eine rückwirkende Rechnung nur
+  näherungsweise möglich (kein stundengenauer Verlauf in der Vergangenheit).
+- Voraussetzung: Die Quell-Sensoren existieren seit dem Datum und haben eine
+  `state_class` (sonst speichert der Recorder keine Langzeit-Statistik).
+
+Jederzeit neu anstoßen lässt sich das über den Service **`roi_tracker.recalculate`**:
+
+```yaml
+action: roi_tracker.recalculate
+target:
+  device_id: <Geräte-ID der Anlage>
+data:
+  start_date: "2025-01-01"   # optional; sonst das konfigurierte Startdatum
+```
+
 ## 🔄 Zurücksetzen
 
 Über den Service **`roi_tracker.reset`** (Ziel: das Gerät der Anlage) setzt du

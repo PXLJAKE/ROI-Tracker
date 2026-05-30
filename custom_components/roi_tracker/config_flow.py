@@ -36,6 +36,7 @@ from .const import (
     CONF_REWARD_FIXED,
     CONF_REWARD_MODE,
     CONF_REWARD_SENSOR,
+    CONF_START_DATE,
     CONF_TEMPLATE,
     DOMAIN,
     PRICE_MODE_COST_SENSOR,
@@ -103,6 +104,10 @@ def _build_schema(template: str, defaults: dict[str, Any]) -> vol.Schema:
             CONF_INVESTMENT, default=defaults.get(CONF_INVESTMENT, 0)
         ): _INVEST_SELECTOR,
     }
+
+    # Optionales Startdatum (auch rückwirkend): rechnet ab diesem Tag aus der
+    # gespeicherten Sensor-Historie.
+    schema[_opt(CONF_START_DATE, defaults)] = selector.DateSelector()
 
     # Mengen-Sensoren je nach Vorlage
     if CONF_PRODUCTION_SENSOR in fields:

@@ -1,6 +1,7 @@
 {
   "domain": "roi_tracker",
   "name": "ROI Tracker",
+  "after_dependencies": ["recorder"],
   "codeowners": ["@pxljake"],
   "config_flow": true,
   "documentation": "https://github.com/pxljake/roi-tracker",
