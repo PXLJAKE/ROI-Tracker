@@ -3,37 +3,50 @@
     "step": {
       "user": {
         "title": "ROI Tracker – add an asset",
-        "description": "Pick a template. It determines which fields are offered in the next step.",
+        "description": "Pick a template. It determines which fields are offered next.",
         "data": {
           "template": "Template"
         }
       },
-      "details": {
-        "title": "Configure asset",
-        "description": "Set the investment, sensors and prices. Sensors you don't have can be left empty.",
+      "setup": {
+        "title": "Set up asset",
+        "description": "Enter the investment and your existing sensors. Amount sensors must be **cumulative meter readings** (kWh), not instantaneous power (kW). Leave fields you don't have empty.",
         "data": {
           "name": "Asset name",
-          "investment": "Investment cost (€)",
+          "investment": "Investment cost",
           "start_date": "Start date (optional, can be in the past)",
-          "production_sensor": "Sensor: produced/generated amount",
-          "consumption_sensor": "Sensor: self-consumption / used amount",
-          "export_sensor": "Sensor: exported/delivered amount",
-          "battery_charge_sensor": "Sensor: battery charged",
-          "battery_discharge_sensor": "Sensor: battery discharged",
-          "price_mode": "Purchase price – source",
-          "price_fixed": "Fixed purchase price (€/unit)",
-          "price_sensor": "Sensor: purchase price (€/unit)",
-          "cost_sensor": "Sensor: accumulated cost (€)",
-          "baseline_rate": "Baseline cost of old solution (€/unit)",
-          "reward_mode": "Feed-in reward – source",
-          "reward_fixed": "Fixed feed-in tariff (€/unit)",
-          "reward_sensor": "Sensor: accumulated reward (€)"
+          "production_sensor": "Generated energy (kWh, cumulative)",
+          "consumption_sensor": "Self-consumption (kWh, cumulative)",
+          "export_sensor": "Exported to grid (kWh, cumulative)",
+          "battery_discharge_sensor": "Discharged from battery (kWh, cumulative)",
+          "price_mode": "Where does your electricity price (import) come from?",
+          "reward_mode": "Where does your feed-in tariff come from?"
         },
         "data_description": {
-          "investment": "One-time investment that should pay off over time.",
-          "start_date": "Optionally a date in the past. The calculation then starts retroactively from that day using the stored sensor history. Exact with a fixed price or € cost sensor; requires the sensors to have long-term statistics since that date.",
-          "baseline_rate": "What the previous solution would have cost per unit (e.g. petrol cost per kWh-equivalent for an EV).",
-          "cost_sensor": "A sensor already denominated in € such as Tibber's \"accumulated cost\" – its delta is used directly as savings."
+          "investment": "One-time investment in € that should pay off (e.g. 12000).",
+          "start_date": "Optionally a date in the past. The calculation then starts retroactively from that day using the stored sensor history. Exact with a fixed price; requires the sensors to have long-term statistics since that date.",
+          "consumption_sensor": "The self-used solar energy in kWh – NOT the grid import. Savings = this amount × electricity price.",
+          "export_sensor": "Energy exported to the grid in kWh. Feed-in revenue = this × tariff.",
+          "battery_discharge_sensor": "Energy taken from the battery in kWh. Counted like self-consumption (× price) as savings.",
+          "price_mode": "Determines how the monetary value of your self-consumption is calculated. You enter the matching value/sensor in the next step."
+        }
+      },
+      "sources": {
+        "title": "Prices & feed-in",
+        "description": "Enter the values matching your selection. Prices always in **€ per kWh** (e.g. 0.30).",
+        "data": {
+          "price_fixed": "Fixed electricity price (€/kWh)",
+          "price_sensor": "Electricity price sensor (€/kWh, e.g. Tibber)",
+          "cost_sensor": "Sensor: € value of savings (cumulative)",
+          "reward_fixed": "Fixed feed-in tariff (€/kWh)",
+          "reward_sensor": "Sensor: feed-in revenue in € (cumulative)"
+        },
+        "data_description": {
+          "price_fixed": "Your energy price per kWh, e.g. 0.30. Multiplied by self-consumption.",
+          "price_sensor": "A sensor providing the current energy price in €/kWh (e.g. Tibber). Each self-used kWh is valued at the price at that moment.",
+          "cost_sensor": "Only choose this if you already have a sensor accumulating the saved amount in €. NOT your electricity bill / \"accumulated cost\" – that would be expenses, not savings.",
+          "reward_fixed": "Your feed-in tariff per kWh, e.g. 0.08.",
+          "reward_sensor": "A sensor accumulating the feed-in revenue received in €."
         }
       }
     },
@@ -45,24 +58,38 @@
     "step": {
       "init": {
         "title": "Edit asset",
-        "description": "Adjust sensors and prices. Changes apply immediately.",
+        "description": "Adjust investment, sensors and price sources. Amount sensors are cumulative kWh meter readings. Changes apply immediately.",
         "data": {
           "name": "Asset name",
-          "investment": "Investment cost (€)",
+          "investment": "Investment cost",
           "start_date": "Start date (optional, can be in the past)",
-          "production_sensor": "Sensor: produced/generated amount",
-          "consumption_sensor": "Sensor: self-consumption / used amount",
-          "export_sensor": "Sensor: exported/delivered amount",
-          "battery_charge_sensor": "Sensor: battery charged",
-          "battery_discharge_sensor": "Sensor: battery discharged",
-          "price_mode": "Purchase price – source",
-          "price_fixed": "Fixed purchase price (€/unit)",
-          "price_sensor": "Sensor: purchase price (€/unit)",
-          "cost_sensor": "Sensor: accumulated cost (€)",
-          "baseline_rate": "Baseline cost of old solution (€/unit)",
-          "reward_mode": "Feed-in reward – source",
-          "reward_fixed": "Fixed feed-in tariff (€/unit)",
-          "reward_sensor": "Sensor: accumulated reward (€)"
+          "production_sensor": "Generated energy (kWh, cumulative)",
+          "consumption_sensor": "Self-consumption (kWh, cumulative)",
+          "export_sensor": "Exported to grid (kWh, cumulative)",
+          "battery_discharge_sensor": "Discharged from battery (kWh, cumulative)",
+          "price_mode": "Where does your electricity price (import) come from?",
+          "reward_mode": "Where does your feed-in tariff come from?"
+        },
+        "data_description": {
+          "investment": "One-time investment in € that should pay off.",
+          "consumption_sensor": "The self-used solar energy in kWh – NOT the grid import.",
+          "export_sensor": "Energy exported to the grid in kWh.",
+          "battery_discharge_sensor": "Energy taken from the battery in kWh."
+        }
+      },
+      "sources": {
+        "title": "Prices & feed-in",
+        "description": "Enter the values matching your selection. Prices always in € per kWh.",
+        "data": {
+          "price_fixed": "Fixed electricity price (€/kWh)",
+          "price_sensor": "Electricity price sensor (€/kWh, e.g. Tibber)",
+          "cost_sensor": "Sensor: € value of savings (cumulative)",
+          "reward_fixed": "Fixed feed-in tariff (€/kWh)",
+          "reward_sensor": "Sensor: feed-in revenue in € (cumulative)"
+        },
+        "data_description": {
+          "price_sensor": "Sensor with the current energy price in €/kWh (e.g. Tibber).",
+          "cost_sensor": "Only a sensor accumulating the saved amount in € – not the electricity bill."
         }
       }
     }
@@ -78,9 +105,9 @@
     },
     "price_mode": {
       "options": {
-        "fixed": "Fixed value",
-        "sensor": "Dynamic sensor (€/unit)",
-        "cost_sensor": "Ready-made cost sensor (€)",
+        "fixed": "Fixed price (€/kWh)",
+        "sensor": "Dynamic price sensor (€/kWh, e.g. Tibber)",
+        "cost_sensor": "Ready-made € value sensor",
         "none": "None"
       }
     }
