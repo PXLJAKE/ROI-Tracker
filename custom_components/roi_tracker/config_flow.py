@@ -53,7 +53,7 @@ _SENSOR_SELECTOR = selector.EntitySelector(
 )
 _PRICE_SELECTOR = selector.NumberSelector(
     selector.NumberSelectorConfig(
-        min=0, step=0.0001, mode=selector.NumberSelectorMode.BOX
+        min=0, step="any", mode=selector.NumberSelectorMode.BOX
     )
 )
 _INVEST_SELECTOR = selector.NumberSelector(
