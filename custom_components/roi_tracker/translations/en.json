@@ -1,0 +1,97 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "ROI Tracker – add an asset",
+        "description": "Pick a template. It determines which fields are offered in the next step.",
+        "data": {
+          "template": "Template"
+        }
+      },
+      "details": {
+        "title": "Configure asset",
+        "description": "Set the investment, sensors and prices. Sensors you don't have can be left empty.",
+        "data": {
+          "name": "Asset name",
+          "investment": "Investment cost (€)",
+          "production_sensor": "Sensor: produced/generated amount",
+          "consumption_sensor": "Sensor: self-consumption / used amount",
+          "export_sensor": "Sensor: exported/delivered amount",
+          "battery_charge_sensor": "Sensor: battery charged",
+          "battery_discharge_sensor": "Sensor: battery discharged",
+          "price_mode": "Purchase price – source",
+          "price_fixed": "Fixed purchase price (€/unit)",
+          "price_sensor": "Sensor: purchase price (€/unit)",
+          "cost_sensor": "Sensor: accumulated cost (€)",
+          "baseline_rate": "Baseline cost of old solution (€/unit)",
+          "reward_mode": "Feed-in reward – source",
+          "reward_fixed": "Fixed feed-in tariff (€/unit)",
+          "reward_sensor": "Sensor: accumulated reward (€)"
+        },
+        "data_description": {
+          "investment": "One-time investment that should pay off over time.",
+          "baseline_rate": "What the previous solution would have cost per unit (e.g. petrol cost per kWh-equivalent for an EV).",
+          "cost_sensor": "A sensor already denominated in € such as Tibber's \"accumulated cost\" – its delta is used directly as savings."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "This asset is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Edit asset",
+        "description": "Adjust sensors and prices. Changes apply immediately.",
+        "data": {
+          "name": "Asset name",
+          "investment": "Investment cost (€)",
+          "production_sensor": "Sensor: produced/generated amount",
+          "consumption_sensor": "Sensor: self-consumption / used amount",
+          "export_sensor": "Sensor: exported/delivered amount",
+          "battery_charge_sensor": "Sensor: battery charged",
+          "battery_discharge_sensor": "Sensor: battery discharged",
+          "price_mode": "Purchase price – source",
+          "price_fixed": "Fixed purchase price (€/unit)",
+          "price_sensor": "Sensor: purchase price (€/unit)",
+          "cost_sensor": "Sensor: accumulated cost (€)",
+          "baseline_rate": "Baseline cost of old solution (€/unit)",
+          "reward_mode": "Feed-in reward – source",
+          "reward_fixed": "Fixed feed-in tariff (€/unit)",
+          "reward_sensor": "Sensor: accumulated reward (€)"
+        }
+      }
+    }
+  },
+  "selector": {
+    "template": {
+      "options": {
+        "pv": "PV system",
+        "ev": "Electric vehicle",
+        "heating": "Heating / heat pump",
+        "custom": "Custom"
+      }
+    },
+    "price_mode": {
+      "options": {
+        "fixed": "Fixed value",
+        "sensor": "Dynamic sensor (€/unit)",
+        "cost_sensor": "Ready-made cost sensor (€)",
+        "none": "None"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "total_return": { "name": "Total return" },
+      "savings": { "name": "Savings" },
+      "revenue": { "name": "Feed-in revenue" },
+      "remaining_investment": { "name": "Remaining investment" },
+      "amortization": { "name": "Amortization" },
+      "roi_percent": { "name": "ROI" },
+      "breakeven_days": { "name": "Days to break-even" },
+      "self_sufficiency": { "name": "Self-sufficiency" }
+    }
+  }
+}

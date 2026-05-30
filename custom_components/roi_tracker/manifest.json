@@ -1,0 +1,12 @@
+{
+  "domain": "roi_tracker",
+  "name": "ROI Tracker",
+  "codeowners": ["@pxljake"],
+  "config_flow": true,
+  "documentation": "https://github.com/pxljake/roi-tracker",
+  "integration_type": "device",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/pxljake/roi-tracker/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

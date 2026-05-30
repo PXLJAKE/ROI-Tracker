@@ -1,0 +1,97 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "ROI Tracker – Anlage anlegen",
+        "description": "Wähle eine Vorlage. Sie bestimmt, welche Felder im nächsten Schritt angeboten werden.",
+        "data": {
+          "template": "Vorlage"
+        }
+      },
+      "details": {
+        "title": "Anlage konfigurieren",
+        "description": "Lege Investition, Sensoren und Preise fest. Nicht vorhandene Sensoren können leer bleiben.",
+        "data": {
+          "name": "Name der Anlage",
+          "investment": "Anschaffungskosten (€)",
+          "production_sensor": "Sensor: erzeugte/erbrachte Menge",
+          "consumption_sensor": "Sensor: Eigenverbrauch / genutzte Menge",
+          "export_sensor": "Sensor: eingespeiste/abgegebene Menge",
+          "battery_charge_sensor": "Sensor: Batterie geladen",
+          "battery_discharge_sensor": "Sensor: Batterie entladen",
+          "price_mode": "Bezugspreis – Quelle",
+          "price_fixed": "Bezugspreis fest (€/Einheit)",
+          "price_sensor": "Sensor: Bezugspreis (€/Einheit)",
+          "cost_sensor": "Sensor: kumulierte Kosten (€)",
+          "baseline_rate": "Vergleichskosten Alt-Lösung (€/Einheit)",
+          "reward_mode": "Vergütung – Quelle",
+          "reward_fixed": "Einspeisevergütung fest (€/Einheit)",
+          "reward_sensor": "Sensor: kumulierte Vergütung (€)"
+        },
+        "data_description": {
+          "investment": "Einmalige Investitionssumme, die sich amortisieren soll.",
+          "baseline_rate": "Was die frühere Lösung pro Einheit gekostet hätte (z. B. Benzinkosten je kWh-Äquivalent beim E-Auto).",
+          "cost_sensor": "Bereits in € geführter Sensor wie Tibbers „accumulated cost“ – dann wird das Delta direkt als Ersparnis genutzt."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Diese Anlage ist bereits konfiguriert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Anlage bearbeiten",
+        "description": "Passe Sensoren und Preise an. Änderungen werden sofort übernommen.",
+        "data": {
+          "name": "Name der Anlage",
+          "investment": "Anschaffungskosten (€)",
+          "production_sensor": "Sensor: erzeugte/erbrachte Menge",
+          "consumption_sensor": "Sensor: Eigenverbrauch / genutzte Menge",
+          "export_sensor": "Sensor: eingespeiste/abgegebene Menge",
+          "battery_charge_sensor": "Sensor: Batterie geladen",
+          "battery_discharge_sensor": "Sensor: Batterie entladen",
+          "price_mode": "Bezugspreis – Quelle",
+          "price_fixed": "Bezugspreis fest (€/Einheit)",
+          "price_sensor": "Sensor: Bezugspreis (€/Einheit)",
+          "cost_sensor": "Sensor: kumulierte Kosten (€)",
+          "baseline_rate": "Vergleichskosten Alt-Lösung (€/Einheit)",
+          "reward_mode": "Vergütung – Quelle",
+          "reward_fixed": "Einspeisevergütung fest (€/Einheit)",
+          "reward_sensor": "Sensor: kumulierte Vergütung (€)"
+        }
+      }
+    }
+  },
+  "selector": {
+    "template": {
+      "options": {
+        "pv": "PV-Anlage",
+        "ev": "Elektroauto",
+        "heating": "Heizung / Wärmepumpe",
+        "custom": "Benutzerdefiniert"
+      }
+    },
+    "price_mode": {
+      "options": {
+        "fixed": "Fester Wert",
+        "sensor": "Dynamischer Sensor (€/Einheit)",
+        "cost_sensor": "Fertiger Kosten-Sensor (€)",
+        "none": "Keine"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "total_return": { "name": "Gesamtrückfluss" },
+      "savings": { "name": "Ersparnis" },
+      "revenue": { "name": "Einspeiseertrag" },
+      "remaining_investment": { "name": "Offener Restbetrag" },
+      "amortization": { "name": "Amortisation" },
+      "roi_percent": { "name": "ROI" },
+      "breakeven_days": { "name": "Restlaufzeit bis Break-Even" },
+      "self_sufficiency": { "name": "Autarkiegrad" }
+    }
+  }
+}
