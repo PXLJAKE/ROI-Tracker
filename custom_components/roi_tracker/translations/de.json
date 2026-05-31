@@ -127,7 +127,11 @@
       "self_sufficiency": { "name": "Eigenverbrauchsquote" },
       "daily_average": { "name": "Tages-Ø Rückfluss" },
       "monthly_estimate": { "name": "Monatliche Prognose" },
-      "grid_import_cost": { "name": "Netzbezug (Kosten)" }
+      "grid_import_cost": { "name": "Netzbezug (Kosten)" },
+      "total_consumption_kwh": { "name": "Eigenverbrauch gesamt (kWh)" },
+      "total_export_kwh": { "name": "Einspeisung gesamt (kWh)" },
+      "total_battery_discharge_kwh": { "name": "Batterie-Entladung gesamt (kWh)" },
+      "grid_import_kwh": { "name": "Netzbezug gesamt (kWh)" }
     }
   },
   "services": {

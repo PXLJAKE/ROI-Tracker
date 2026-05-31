@@ -67,6 +67,10 @@ class RoiResult:
     yearly_estimate: float = 0.0
     grid_import_kwh: float = 0.0
     grid_import_cost: float = 0.0
+    # Kumulierte Mengen als eigene Felder → werden als permanente HA-Sensoren exponiert
+    total_consumption_kwh: float = 0.0
+    total_export_kwh: float = 0.0
+    total_battery_discharge_kwh: float = 0.0
     attributes: dict = field(default_factory=dict)
 
 
@@ -222,6 +226,9 @@ def update(
 
     grid_import_kwh = round(state.grid_import_kwh, 3)
     grid_import_cost = round(state.grid_import_cost, 2)
+    total_consumption_kwh = round(state.total_consumption, 3)
+    total_export_kwh = round(state.total_export, 3)
+    total_battery_discharge_kwh = round(state.total_battery_discharge, 3)
 
     return RoiResult(
         savings=round(state.savings, 2),
@@ -240,6 +247,9 @@ def update(
         yearly_estimate=yearly_estimate,
         grid_import_kwh=grid_import_kwh,
         grid_import_cost=grid_import_cost,
+        total_consumption_kwh=total_consumption_kwh,
+        total_export_kwh=total_export_kwh,
+        total_battery_discharge_kwh=total_battery_discharge_kwh,
         attributes={
             "investment": investment,
             "daily_average": round(daily_avg, 2),

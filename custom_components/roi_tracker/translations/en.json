@@ -126,7 +126,11 @@
       "self_sufficiency": { "name": "Self-consumption rate" },
       "daily_average": { "name": "Daily avg. return" },
       "monthly_estimate": { "name": "Monthly estimate" },
-      "grid_import_cost": { "name": "Grid import (cost)" }
+      "grid_import_cost": { "name": "Grid import (cost)" },
+      "total_consumption_kwh": { "name": "Total self-consumption (kWh)" },
+      "total_export_kwh": { "name": "Total export (kWh)" },
+      "total_battery_discharge_kwh": { "name": "Total battery discharge (kWh)" },
+      "grid_import_kwh": { "name": "Total grid import (kWh)" }
     }
   },
   "services": {

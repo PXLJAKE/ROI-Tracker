@@ -97,6 +97,11 @@ SENSOR_ROI_PERCENT: Final = "roi_percent"
 SENSOR_DAILY_AVERAGE: Final = "daily_average"
 SENSOR_MONTHLY_ESTIMATE: Final = "monthly_estimate"
 SENSOR_GRID_IMPORT_COST: Final = "grid_import_cost"
+# Permanente kWh-Summier-Sensoren (akkumulieren auch über Reset-Sensoren hinweg)
+SENSOR_TOTAL_CONSUMPTION_KWH: Final = "total_consumption_kwh"
+SENSOR_TOTAL_EXPORT_KWH: Final = "total_export_kwh"
+SENSOR_TOTAL_BATTERY_DISCHARGE_KWH: Final = "total_battery_discharge_kwh"
+SENSOR_GRID_IMPORT_KWH: Final = "grid_import_kwh"
 
 # --- Sonstiges --------------------------------------------------------------
 

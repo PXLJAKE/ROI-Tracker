@@ -26,12 +26,16 @@ from .const import (
     SENSOR_BREAKEVEN_DAYS,
     SENSOR_DAILY_AVERAGE,
     SENSOR_GRID_IMPORT_COST,
+    SENSOR_GRID_IMPORT_KWH,
     SENSOR_MONTHLY_ESTIMATE,
     SENSOR_REMAINING,
     SENSOR_REVENUE,
     SENSOR_ROI_PERCENT,
     SENSOR_SAVINGS,
     SENSOR_SELF_SUFFICIENCY,
+    SENSOR_TOTAL_BATTERY_DISCHARGE_KWH,
+    SENSOR_TOTAL_CONSUMPTION_KWH,
+    SENSOR_TOTAL_EXPORT_KWH,
     SENSOR_TOTAL_RETURN,
 )
 from .coordinator import RoiTrackerCoordinator
@@ -148,6 +152,45 @@ SENSOR_DESCRIPTIONS: tuple[RoiSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         icon="mdi:transmission-tower-import",
         value_fn=lambda r: r.grid_import_cost if r.grid_import_cost else None,
+    ),
+    # ── Permanente kWh-Summier-Sensoren ──────────────────────────────────────
+    # Diese Sensoren akkumulieren dauerhaft, auch wenn der Quell-Sensor täglich
+    # oder monatlich zurücksetzt. Nützlich für Automationen und externe Karten.
+    RoiSensorDescription(
+        key=SENSOR_TOTAL_CONSUMPTION_KWH,
+        translation_key=SENSOR_TOTAL_CONSUMPTION_KWH,
+        native_unit_of_measurement="kWh",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL,
+        icon="mdi:home-lightning-bolt-outline",
+        value_fn=lambda r: r.total_consumption_kwh if r.total_consumption_kwh else None,
+    ),
+    RoiSensorDescription(
+        key=SENSOR_TOTAL_EXPORT_KWH,
+        translation_key=SENSOR_TOTAL_EXPORT_KWH,
+        native_unit_of_measurement="kWh",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL,
+        icon="mdi:transmission-tower-export",
+        value_fn=lambda r: r.total_export_kwh if r.total_export_kwh else None,
+    ),
+    RoiSensorDescription(
+        key=SENSOR_TOTAL_BATTERY_DISCHARGE_KWH,
+        translation_key=SENSOR_TOTAL_BATTERY_DISCHARGE_KWH,
+        native_unit_of_measurement="kWh",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL,
+        icon="mdi:battery-arrow-down",
+        value_fn=lambda r: r.total_battery_discharge_kwh if r.total_battery_discharge_kwh else None,
+    ),
+    RoiSensorDescription(
+        key=SENSOR_GRID_IMPORT_KWH,
+        translation_key=SENSOR_GRID_IMPORT_KWH,
+        native_unit_of_measurement="kWh",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL,
+        icon="mdi:transmission-tower-import",
+        value_fn=lambda r: r.grid_import_kwh if r.grid_import_kwh else None,
     ),
 )
 

@@ -87,12 +87,10 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
             return
 
         self._state = RoiState()
-        cfg = self.config
-        price_mode = cfg.get(CONF_PRICE_MODE, PRICE_MODE_FIXED)
 
-        # Genauere stündliche Statistik-Methode für dynamische Preissensoren
+        # Statistik-Methode für alle Modi wenn Startdatum gesetzt (am genauesten)
         seeded = False
-        if price_mode == PRICE_MODE_SENSOR and cfg.get(CONF_START_DATE):
+        if self.config.get(CONF_START_DATE):
             seeded = await self.async_seed_from_statistics()
 
         if not seeded:
@@ -123,35 +121,46 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
     async def async_seed_from_statistics(self) -> bool:
         """Berechnet den ROI rückwirkend aus stündlichen HA-Statistiken.
 
-        Funktionsweise:
-          - Liest stündliche Statistiken für Verbrauch-Sensor und Preis-Sensor
-          - Multipliziert pro Stunde: Δverbrauch × damaliger Tibber-Preis
-          - Deutlich genauer als die einfache Baseline-Methode, da historische
-            Preisschwankungen berücksichtigt werden
-          - Setzt last_* auf aktuelle Sensorwerte, damit künftige 5-Minuten-Updates
-            korrekt weiterlaufen
+        Funktioniert für alle Preis-Modi:
+          - PRICE_MODE_SENSOR (Tibber): Δverbrauch × damaliger Preis pro Stunde
+          - PRICE_MODE_FIXED: Δverbrauch × fester Preis (summiert über alle Stunden)
+          - PRICE_MODE_COST_SENSOR: Δkosten-sensor direkt als Ersparnis
 
-        Gibt True zurück wenn mindestens Preis- und Verbrauchsdaten vorhanden.
+        Funktioniert auch für täglich/monatlich rücksetzende Sensoren, da HA in
+        den Statistics den kumulierten ``change``-Wert korrekt fortführt.
+
+        Setzt last_* auf aktuelle Sensorwerte → künftige 5-Minuten-Updates laufen
+        nahtlos weiter.
+
+        Gibt True zurück wenn mindestens Verbrauchsdaten geladen werden konnten.
         """
         start = self._parse_start_date()
         if start is None:
             return False
 
         cfg = self.config
-        consumption_id = cfg.get(CONF_CONSUMPTION_SENSOR)
-        price_id = cfg.get(CONF_PRICE_SENSOR)
-        if not consumption_id or not price_id:
-            return False
+        price_mode = cfg.get(CONF_PRICE_MODE, PRICE_MODE_FIXED)
 
+        consumption_id = cfg.get(CONF_CONSUMPTION_SENSOR)
         export_id = cfg.get(CONF_EXPORT_SENSOR)
         battery_id = cfg.get(CONF_BATTERY_DISCHARGE_SENSOR)
         grid_import_id = cfg.get(CONF_GRID_IMPORT_SENSOR)
+        price_id = cfg.get(CONF_PRICE_SENSOR) if price_mode == PRICE_MODE_SENSOR else None
+        cost_id = cfg.get(CONF_COST_SENSOR) if price_mode == PRICE_MODE_COST_SENSOR else None
+
+        raw_price_fixed = cfg.get(CONF_PRICE_FIXED)
+        price_fixed = float(raw_price_fixed) if raw_price_fixed not in (None, "") else None
 
         raw_reward = cfg.get(CONF_REWARD_FIXED)
         reward_per_unit = float(raw_reward) if raw_reward not in (None, "") else 0.0
 
+        # Mindestanforderung: Verbrauchssensor ODER Kosten-Sensor muss vorhanden sein
+        primary_id = consumption_id or cost_id
+        if not primary_id:
+            return False
+
         statistic_ids = {
-            s for s in [consumption_id, price_id, export_id, battery_id, grid_import_id]
+            s for s in [consumption_id, price_id, cost_id, export_id, battery_id, grid_import_id]
             if s
         }
         now = dt_util.utcnow()
@@ -178,22 +187,31 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
             )
             return False
 
-        # Preis-Dictionary: start-Zeitstempel → mittlerer Preis dieser Stunde
+        # ── Preis-Dictionary für Sensor-Modus ────────────────────────────────
         price_by_start: dict = {}
-        for row in stats.get(price_id, []):
-            ts = row.get("start")
-            mean = row.get("mean")
-            if ts is not None and mean is not None:
-                price_by_start[ts] = mean
+        avg_price: float | None = None
+        if price_mode == PRICE_MODE_SENSOR and price_id:
+            for row in stats.get(price_id, []):
+                ts = row.get("start")
+                mean = row.get("mean")
+                if ts is not None and mean is not None:
+                    price_by_start[ts] = mean
+            if price_by_start:
+                avg_price = _average(list(price_by_start.values()))
+            else:
+                _LOGGER.info(
+                    "Keine Preisstatistiken für '%s' ab %s – nutze Baseline-Methode.",
+                    price_id, start.date(),
+                )
+                return False
 
-        if not price_by_start:
-            _LOGGER.info(
-                "Keine Preisstatistiken für '%s' ab %s – "
-                "nutze einfache Baseline-Methode.", price_id, start.date()
-            )
-            return False
-
-        avg_price = _average(list(price_by_start.values()))
+        def _price_for(ts) -> float | None:
+            """Gibt den Preis für einen Zeitstempel zurück (je nach Modus)."""
+            if price_mode == PRICE_MODE_FIXED:
+                return price_fixed
+            if price_mode == PRICE_MODE_SENSOR:
+                return price_by_start.get(ts, avg_price)
+            return None  # COST_SENSOR: kein Preis nötig
 
         total_savings = 0.0
         total_revenue = 0.0
@@ -206,22 +224,27 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
         matched_hours = 0
         fallback_hours = 0
 
-        # Eigenverbrauch-Ersparnis
-        for row in stats.get(consumption_id, []):
-            change = row.get("change") or 0.0
-            if change <= 0:
-                continue
-            ts = row.get("start")
-            price = price_by_start.get(ts)
-            if price is None:
-                price = avg_price  # Durchschnitt als Fallback für fehlende Stunden
-                fallback_hours += 1
-            else:
-                matched_hours += 1
-            total_savings += change * price
-            total_consumption += change
+        # ── Eigenverbrauch-Ersparnis ──────────────────────────────────────────
+        if price_mode == PRICE_MODE_COST_SENSOR and cost_id:
+            # Kosten-Sensor direkt: Delta = Ersparnis in €
+            for row in stats.get(cost_id, []):
+                change = row.get("change") or 0.0
+                if change > 0:
+                    total_savings += change
+        elif consumption_id:
+            for row in stats.get(consumption_id, []):
+                change = row.get("change") or 0.0
+                if change <= 0:
+                    continue
+                ts = row.get("start")
+                price = _price_for(ts)
+                if price is not None:
+                    total_savings += change * price
+                    matched_hours += 1 if price != avg_price else 0
+                    fallback_hours += 1 if price == avg_price else 0
+                total_consumption += change
 
-        # Einspeise-Ertrag
+        # ── Einspeise-Ertrag ──────────────────────────────────────────────────
         if export_id:
             for row in stats.get(export_id, []):
                 change = row.get("change") or 0.0
@@ -230,29 +253,40 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
                 total_export += change
                 total_revenue += change * reward_per_unit
 
-        # Batterie-Ersparnis
+        # ── Batterie-Ersparnis ────────────────────────────────────────────────
         if battery_id:
             for row in stats.get(battery_id, []):
                 change = row.get("change") or 0.0
                 if change <= 0:
                     continue
                 ts = row.get("start")
-                price = price_by_start.get(ts, avg_price)
-                total_battery += change * price
+                price = _price_for(ts)
+                if price is not None:
+                    total_battery += change * price
                 total_battery_discharge += change
 
-        # Netzbezug (nur Anzeige)
+        # ── Netzbezug (nur Anzeige) ────────────────────────────────────────────
         if grid_import_id:
             for row in stats.get(grid_import_id, []):
                 change = row.get("change") or 0.0
                 if change <= 0:
                     continue
                 ts = row.get("start")
-                price = price_by_start.get(ts, avg_price)
+                price = _price_for(ts)
                 total_grid_kwh += change
-                total_grid_cost += change * price
+                if price is not None:
+                    total_grid_cost += change * price
 
-        # Akkumulierten Zustand setzen
+        # Mindestens ein Sensor muss Daten geliefert haben
+        if not (total_consumption or total_savings or total_export):
+            _LOGGER.info(
+                "Keine Statistikdaten ab %s gefunden (Sensoren haben ggf. keine "
+                "state_class oder HA hat keine Langzeitstatistik gespeichert).",
+                start.date(),
+            )
+            return False
+
+        # ── Zustand setzen ────────────────────────────────────────────────────
         self._state.first_update = start.isoformat()
         self._state.savings = round(total_savings, 4)
         self._state.revenue = round(total_revenue, 4)
@@ -263,26 +297,22 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
         self._state.grid_import_kwh = round(total_grid_kwh, 4)
         self._state.grid_import_cost = round(total_grid_cost, 4)
 
-        # last_* auf aktuelle Sensorwerte setzen (Delta-Basis für nächste Updates)
+        # last_* auf aktuelle Sensorwerte setzen (Delta-Basis für nächste 5-Min-Updates)
         for conf_key, attr in [
             (CONF_CONSUMPTION_SENSOR, "last_consumption"),
             (CONF_EXPORT_SENSOR, "last_export"),
             (CONF_BATTERY_DISCHARGE_SENSOR, "last_battery_discharge"),
             (CONF_GRID_IMPORT_SENSOR, "last_grid_import"),
+            (CONF_COST_SENSOR, "last_cost_total"),
         ]:
             val = self._read_number(cfg.get(conf_key))
             if val is not None:
                 setattr(self._state, attr, val)
 
         _LOGGER.info(
-            "ROI rückwirkend berechnet: %d Stunden ab %s | "
-            "Ersparnis=%.2f€, Ertrag=%.2f€ (Ø Preis=%.4f€/kWh, %d Stunden ohne Preismatch)",
-            matched_hours + fallback_hours,
-            start.date(),
-            total_savings,
-            total_revenue,
-            avg_price or 0,
-            fallback_hours,
+            "ROI rückwirkend berechnet (Modus: %s) | ab %s | "
+            "Ersparnis=%.2f€, Ertrag=%.2f€, Verbrauch=%.1fkWh",
+            price_mode, start.date(), total_savings, total_revenue, total_consumption,
         )
         return True
 
@@ -337,13 +367,7 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
         if start_date:
             self._override_start_date = start_date
 
-        cfg = self.config
-        price_mode = cfg.get(CONF_PRICE_MODE, PRICE_MODE_FIXED)
-        seeded = False
-
-        if price_mode == PRICE_MODE_SENSOR:
-            seeded = await self.async_seed_from_statistics()
-
+        seeded = await self.async_seed_from_statistics()
         if not seeded:
             await self.async_seed_from_history()
 
