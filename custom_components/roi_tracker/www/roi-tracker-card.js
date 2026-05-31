@@ -496,11 +496,18 @@ class RoiTrackerCard extends HTMLElement {
 // ─── Editor ───────────────────────────────────────────────────────────────────
 
 class RoiTrackerCardEditor extends HTMLElement {
+  constructor() {
+    super();
+    this._config = {};  // immer initialisiert, nie undefined
+    this._hass = null;
+    this._root = null;
+  }
+
   setConfig(config) { this._config = { ...config }; this._render(); }
   set hass(hass) { this._hass = hass; this._render(); }
 
   _render() {
-    if (!this._hass) return;
+    if (!this._hass || !this._config) return;
     const lang = (this._hass.language || "de").startsWith("de") ? "de" : "en";
     const t = TXT[lang];
     const cfg = this._config;
