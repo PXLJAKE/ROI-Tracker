@@ -1,14 +1,14 @@
 /**
- * ROI Tracker Card  v0.2.0
- * Lovelace-Karte mit Donut-Chart, Aufschlüsselungs-Balken und Monats-Histogramm.
+ * ROI Tracker Card  v0.2.1
  *
  * Konfiguration:
  *   type: custom:roi-tracker-card
- *   device: <device_id>          # bevorzugt – alle Sensoren automatisch
+ *   device: <device_id>
  *   title: "Meine PV-Anlage"     # optional
  *   language: de | en            # optional, Standard: HA-Sprache
- *   show_chart: true             # Monatsbalken ein-/ausblenden (Standard: true)
- *   show_breakdown: true         # Aufschlüsselung ein-/ausblenden (Standard: true)
+ *   show_chart: true             # Monatsbalken (Standard: true)
+ *   show_breakdown: true         # Aufschlüsselung (Standard: true)
+ *   show_energy: true            # kWh-Statistiken (Standard: true)
  */
 
 const TXT = {
@@ -21,13 +21,19 @@ const TXT = {
     amortization: "Amortisiert",
     roi: "ROI",
     breakeven: "Break-Even",
-    self_consumption: "Eigenverbrauch",
+    self_consumption: "Eigenverbrauch-%",
     daily: "Ø täglich",
     monthly: "Ø monatl.",
     yearly: "Prognose/Jahr",
     invested: "Investiert",
     chart_title: "Monatlicher Rückfluss",
     breakdown_title: "Rückfluss-Aufschlüsselung",
+    energy_title: "Energie seit Start",
+    grid_import: "Netzbezug",
+    grid_cost: "Netzbezug-Kosten",
+    consumption_kwh: "Eigenverbrauch",
+    export_kwh: "Einspeisung",
+    battery_kwh: "Batterie",
     no_data: "Noch keine Daten",
     no_device: "Bitte eine Anlage auswählen",
     pick_device: "Anlage",
@@ -45,13 +51,19 @@ const TXT = {
     amortization: "Amortized",
     roi: "ROI",
     breakeven: "Break-even",
-    self_consumption: "Self-consumption",
+    self_consumption: "Self-cons. %",
     daily: "Avg. daily",
     monthly: "Avg. monthly",
     yearly: "Est. yearly",
     invested: "Invested",
     chart_title: "Monthly return",
     breakdown_title: "Return breakdown",
+    energy_title: "Energy since start",
+    grid_import: "Grid import",
+    grid_cost: "Grid import cost",
+    consumption_kwh: "Self-consumption",
+    export_kwh: "Feed-in",
+    battery_kwh: "Battery",
     no_data: "No data yet",
     no_device: "Please select an asset",
     pick_device: "Asset",
@@ -66,9 +78,11 @@ const KEYS = [
   "total_return", "savings", "battery_savings", "revenue",
   "remaining_investment", "amortization", "roi_percent",
   "breakeven_days", "self_sufficiency", "daily_average", "monthly_estimate",
+  "grid_import_cost", "grid_import_kwh",
+  "total_consumption_kwh", "total_export_kwh", "total_battery_discharge_kwh",
 ];
 
-// ─── Hauptkarte ──────────────────────────────────────────────────────────────
+// ─── Hauptkarte ───────────────────────────────────────────────────────────────
 
 class RoiTrackerCard extends HTMLElement {
   constructor() {
@@ -81,9 +95,7 @@ class RoiTrackerCard extends HTMLElement {
     this._root = null;
   }
 
-  setConfig(config) {
-    this._config = config || {};
-  }
+  setConfig(config) { this._config = config || {}; }
 
   set hass(hass) {
     this._hass = hass;
@@ -91,7 +103,7 @@ class RoiTrackerCard extends HTMLElement {
     this._maybeRefreshStats();
   }
 
-  getCardSize() { return 5; }
+  getCardSize() { return 6; }
 
   static getConfigElement() {
     return document.createElement("roi-tracker-card-editor");
@@ -142,18 +154,24 @@ class RoiTrackerCard extends HTMLElement {
   _attr(entityId, key) {
     if (!entityId || !this._hass) return null;
     const s = this._hass.states[entityId];
-    return s && s.attributes ? s.attributes[key] : null;
+    return s && s.attributes ? (s.attributes[key] ?? null) : null;
   }
 
   // ── Formatierung ──────────────────────────────────────────────────────────
 
-  _fmt(v, decimals = 2) {
+  _fmt(v, dec = 2) {
     if (v == null) return "–";
     const locale = this._lang() === "de" ? "de-DE" : "en-US";
     return new Intl.NumberFormat(locale, {
       style: "currency", currency: "EUR",
-      minimumFractionDigits: decimals, maximumFractionDigits: decimals,
+      minimumFractionDigits: dec, maximumFractionDigits: dec,
     }).format(v);
+  }
+
+  _fmtKwh(v) {
+    if (v == null || v === 0) return null;
+    const locale = this._lang() === "de" ? "de-DE" : "en-US";
+    return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(v) + " kWh";
   }
 
   _fmtBreakeven(days, t) {
@@ -164,10 +182,11 @@ class RoiTrackerCard extends HTMLElement {
   }
 
   _fmtDate(isoDate) {
-    if (!isoDate) return "–";
+    if (!isoDate) return null;
     try {
-      const d = new Date(isoDate);
-      return d.toLocaleDateString(this._lang() === "de" ? "de-DE" : "en-US");
+      return new Date(isoDate).toLocaleDateString(
+        this._lang() === "de" ? "de-DE" : "en-US"
+      );
     } catch { return isoDate; }
   }
 
@@ -177,8 +196,7 @@ class RoiTrackerCard extends HTMLElement {
     const ent = this._resolveEntities();
     if (!ent.total_return) return;
     const now = Date.now();
-    // Cache 5 Minuten
-    if (this._statsCache && (now - this._statsCacheTime) < 300_000) return;
+    if (this._statsCache && now - this._statsCacheTime < 300_000) return;
     if (this._statsFetching) return;
     this._statsFetching = true;
 
@@ -206,29 +224,25 @@ class RoiTrackerCard extends HTMLElement {
     });
   }
 
-  // ── SVG-Komponenten ───────────────────────────────────────────────────────
+  // ── SVG-Donut ─────────────────────────────────────────────────────────────
 
   _renderDonut(pct) {
     const r = 38, cx = 50, cy = 50;
     const circ = 2 * Math.PI * r;
     const capped = Math.min(pct == null ? 0 : pct, 100);
     const filled = circ * capped / 100;
-    const gap = circ - filled;
-    const offset = circ * 0.25; // Start bei 12 Uhr
     const color = capped >= 100
       ? "var(--success-color, #4caf50)"
       : "var(--primary-color, #03a9f4)";
-    const label = capped >= 100
-      ? "✓"
-      : `${Math.round(capped)}%`;
+    const label = capped >= 100 ? "✓" : `${Math.round(capped)}%`;
     return `
       <svg viewBox="0 0 100 100" class="donut">
         <circle cx="${cx}" cy="${cy}" r="${r}" fill="none"
           stroke="var(--divider-color,#e0e0e0)" stroke-width="11"/>
         <circle cx="${cx}" cy="${cy}" r="${r}" fill="none"
           stroke="${color}" stroke-width="11" stroke-linecap="round"
-          stroke-dasharray="${filled} ${gap}"
-          stroke-dashoffset="${offset}"
+          stroke-dasharray="${filled} ${circ - filled}"
+          stroke-dashoffset="${circ * 0.25}"
           style="transition:stroke-dasharray .7s ease;"/>
         <text x="50" y="46" text-anchor="middle" font-size="17" font-weight="700"
           fill="var(--primary-text-color)">${label}</text>
@@ -237,6 +251,8 @@ class RoiTrackerCard extends HTMLElement {
       </svg>`;
   }
 
+  // ── Stacked Bar ───────────────────────────────────────────────────────────
+
   _renderStackedBar(savings, revenue, battery) {
     const t = TXT[this._lang()];
     const total = (savings || 0) + (revenue || 0) + (battery || 0);
@@ -244,7 +260,7 @@ class RoiTrackerCard extends HTMLElement {
     const sp = ((savings || 0) / total * 100).toFixed(1);
     const rp = ((revenue || 0) / total * 100).toFixed(1);
     const bp = ((battery || 0) / total * 100).toFixed(1);
-    const legend = [
+    const items = [
       savings > 0 ? `<span class="dot dot-blue"></span><span>${t.savings} ${this._fmt(savings, 0)}</span>` : "",
       revenue > 0 ? `<span class="dot dot-green"></span><span>${t.revenue} ${this._fmt(revenue, 0)}</span>` : "",
       battery > 0 ? `<span class="dot dot-orange"></span><span>${t.battery_savings} ${this._fmt(battery, 0)}</span>` : "",
@@ -252,12 +268,40 @@ class RoiTrackerCard extends HTMLElement {
     return `
       <div class="section-title">${t.breakdown_title}</div>
       <div class="stack-bar">
-        ${savings > 0 ? `<div class="stack-seg seg-blue" style="width:${sp}%" title="${t.savings}"></div>` : ""}
-        ${revenue > 0 ? `<div class="stack-seg seg-green" style="width:${rp}%" title="${t.revenue}"></div>` : ""}
-        ${battery > 0 ? `<div class="stack-seg seg-orange" style="width:${bp}%" title="${t.battery_savings}"></div>` : ""}
+        ${savings > 0 ? `<div class="stack-seg seg-blue" style="width:${sp}%"></div>` : ""}
+        ${revenue > 0 ? `<div class="stack-seg seg-green" style="width:${rp}%"></div>` : ""}
+        ${battery > 0 ? `<div class="stack-seg seg-orange" style="width:${bp}%"></div>` : ""}
       </div>
-      <div class="stack-legend">${legend}</div>`;
+      <div class="stack-legend">${items}</div>`;
   }
+
+  // ── Energie-Statistiken ───────────────────────────────────────────────────
+
+  _renderEnergy(consumKwh, exportKwh, batteryKwh, gridKwh, gridCost) {
+    const t = TXT[this._lang()];
+    const rows = [
+      [t.consumption_kwh, this._fmtKwh(consumKwh), "dot-blue"],
+      [t.export_kwh, this._fmtKwh(exportKwh), "dot-green"],
+      [t.battery_kwh, this._fmtKwh(batteryKwh), "dot-orange"],
+      [t.grid_import, this._fmtKwh(gridKwh), "dot-grey"],
+      gridCost > 0 ? [t.grid_cost, this._fmt(gridCost, 0), "dot-grey"] : null,
+    ].filter(r => r && r[1]);
+
+    if (!rows.length) return "";
+    return `
+      <div class="section-title">${t.energy_title}</div>
+      <div class="energy-rows">
+        ${rows.map(([label, val, dot]) =>
+          `<div class="energy-row">
+            <span class="dot ${dot}"></span>
+            <span class="energy-lbl">${label}</span>
+            <span class="energy-val">${val}</span>
+          </div>`
+        ).join("")}
+      </div>`;
+  }
+
+  // ── Monatsbalken ──────────────────────────────────────────────────────────
 
   _renderMonthlyChart() {
     const t = TXT[this._lang()];
@@ -268,7 +312,7 @@ class RoiTrackerCard extends HTMLElement {
               <div class="chart-msg">${t.loading}</div>`;
     }
     const data = this._statsCache;
-    if (!data || data.length === 0) {
+    if (!data || !data.length) {
       return `<div class="section-title">${t.chart_title}</div>
               <div class="chart-msg">${t.no_data}</div>`;
     }
@@ -282,31 +326,22 @@ class RoiTrackerCard extends HTMLElement {
     const bars = data.map((m, i) => {
       const h = Math.max(2, (values[i] / maxVal) * chartH);
       const x = i * (barW + gap);
-      const y = chartH - h;
-      const date = new Date(m.start);
-      const mo = date.toLocaleDateString(lang === "de" ? "de-DE" : "en-US", { month: "short" });
-      const valStr = values[i] > 0 ? this._fmt(values[i], 0) : "";
-      const isLatest = i === n - 1;
-      const fill = isLatest
-        ? "var(--primary-color,#03a9f4)"
-        : "var(--primary-color,#03a9f4)";
-      const opacity = isLatest ? "1" : "0.65";
-      return `
-        <g>
-          <rect x="${x}" y="${y}" width="${barW}" height="${h}" rx="3"
-            fill="${fill}" opacity="${opacity}"/>
-          <text x="${x + barW / 2}" y="${chartH + 13}" text-anchor="middle"
-            font-size="8" fill="var(--secondary-text-color)">${mo}</text>
-        </g>`;
+      const mo = new Date(m.start).toLocaleDateString(
+        lang === "de" ? "de-DE" : "en-US", { month: "short" }
+      );
+      return `<g>
+        <rect x="${x}" y="${chartH - h}" width="${barW}" height="${h}" rx="3"
+          fill="var(--primary-color,#03a9f4)" opacity="${i === n - 1 ? 1 : 0.65}"/>
+        <text x="${x + barW / 2}" y="${chartH + 13}" text-anchor="middle"
+          font-size="8" fill="var(--secondary-text-color)">${mo}</text>
+      </g>`;
     }).join("");
 
     return `
       <div class="section-title">${t.chart_title}</div>
       <div class="chart-wrap">
         <svg viewBox="0 0 ${totalW} ${chartH + 18}"
-          style="width:100%;height:90px;display:block;overflow:visible;">
-          ${bars}
-        </svg>
+          style="width:100%;height:90px;display:block;overflow:visible;">${bars}</svg>
       </div>`;
   }
 
@@ -319,6 +354,7 @@ class RoiTrackerCard extends HTMLElement {
     const title = this._config.title || "ROI Tracker";
     const showChart = this._config.show_chart !== false;
     const showBreakdown = this._config.show_breakdown !== false;
+    const showEnergy = this._config.show_energy !== false;
 
     if (!this._config.device && (!this._config.entities || !Object.keys(ent).length)) {
       this._setHtml(`<ha-card header="${title}">
@@ -338,16 +374,21 @@ class RoiTrackerCard extends HTMLElement {
     const selfCons = this._value(ent.self_sufficiency);
     const daily = this._value(ent.daily_average);
     const monthly = this._value(ent.monthly_estimate);
+    const gridCost = this._value(ent.grid_import_cost);
+    const gridKwh = this._value(ent.grid_import_kwh);
+    const consumKwh = this._value(ent.total_consumption_kwh);
+    const exportKwh = this._value(ent.total_export_kwh);
+    const battKwh = this._value(ent.total_battery_discharge_kwh);
 
-    // Aus attributes des total_return-Sensors
+    // Aus Attributes des total_return-Sensors
     const investment = this._attr(ent.total_return, "investment");
     const breakevenDate = this._attr(ent.total_return, "breakeven_date");
     const yearlyEst = this._attr(ent.total_return, "yearly_estimate");
 
-    const pct = amort == null ? 0 : amort;
+    const pct = amort ?? 0;
 
-    // ── Metriken-Kacheln
-    const tiles = [
+    // Kacheln
+    const tileData = [
       { label: t.daily, val: this._fmt(daily) },
       { label: t.monthly, val: this._fmt(monthly) },
       { label: t.yearly, val: this._fmt(yearlyEst) },
@@ -356,19 +397,15 @@ class RoiTrackerCard extends HTMLElement {
       selfCons != null ? { label: t.self_consumption, val: `${selfCons} %` } : null,
     ].filter(Boolean);
 
-    const tilesHtml = tiles.map(t =>
+    const tiles = tileData.map(ti =>
       `<div class="tile">
-        <div class="tile-val">${t.val}</div>
-        <div class="tile-lbl">${t.label}</div>
+        <div class="tile-val">${ti.val}</div>
+        <div class="tile-lbl">${ti.label}</div>
       </div>`
     ).join("");
 
-    // ── Aufschlüsselung
-    const breakdownHtml = showBreakdown
-      ? this._renderStackedBar(savings, revenue, battery)
-      : "";
-
-    // ── Monatsbalken
+    const breakdownHtml = showBreakdown ? this._renderStackedBar(savings, revenue, battery) : "";
+    const energyHtml = showEnergy ? this._renderEnergy(consumKwh, exportKwh, battKwh, gridKwh, gridCost) : "";
     const chartHtml = showChart ? this._renderMonthlyChart() : "";
 
     this._setHtml(`
@@ -376,33 +413,23 @@ class RoiTrackerCard extends HTMLElement {
         <div class="card-header">${title}</div>
         <div class="content">
 
-          <!-- Hero: Donut + Hauptzahlen -->
           <div class="hero">
             ${this._renderDonut(pct)}
             <div class="hero-text">
               <div class="hero-total">${this._fmt(total)}</div>
               <div class="hero-label">${t.total_return}</div>
               <div class="hero-sub">
-                <span class="hero-invest">${t.invested}: ${this._fmt(investment, 0)}</span>
-                ${remaining > 0
-                  ? `<span class="hero-remain">▸ ${this._fmt(remaining, 0)} ${t.remaining}</span>`
-                  : ""}
+                <span>${t.invested}: ${this._fmt(investment, 0)}</span>
+                ${remaining > 0 ? `<span class="hero-remain">▸ ${this._fmt(remaining, 0)} ${t.remaining}</span>` : ""}
               </div>
-              <div class="amort-bar-wrap">
-                <div class="amort-bar-track">
-                  <div class="amort-bar-fill" style="width:${Math.min(pct,100)}%"></div>
-                </div>
-              </div>
+              <div class="amort-track"><div class="amort-fill" style="width:${Math.min(pct, 100)}%"></div></div>
             </div>
           </div>
 
-          <!-- Metriken-Kacheln -->
-          <div class="tiles">${tilesHtml}</div>
+          <div class="tiles">${tiles}</div>
 
-          <!-- Aufschlüsselung -->
           ${breakdownHtml ? `<div class="section">${breakdownHtml}</div>` : ""}
-
-          <!-- Monatsbalken -->
+          ${energyHtml ? `<div class="section">${energyHtml}</div>` : ""}
           ${chartHtml ? `<div class="section">${chartHtml}</div>` : ""}
 
         </div>
@@ -410,184 +437,123 @@ class RoiTrackerCard extends HTMLElement {
     `);
   }
 
-  // ── Shadow DOM ────────────────────────────────────────────────────────────
-
   _setHtml(inner) {
     if (!this._root) {
       this._root = this.attachShadow ? this.attachShadow({ mode: "open" }) : this;
     }
-    this._root.innerHTML = `
-      <style>
-        :host { display: block; }
-        .card-header {
-          padding: 12px 16px 0;
-          font-size: 1.1em;
-          font-weight: 600;
-          color: var(--ha-card-header-color, var(--primary-text-color));
-          letter-spacing: 0.01em;
-        }
-        .content { padding: 8px 16px 16px; }
-
-        /* Hero */
-        .hero { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
-        .donut { width: 90px; height: 90px; flex-shrink: 0; }
-        .hero-text { flex: 1; min-width: 0; }
-        .hero-total {
-          font-size: 1.9em; font-weight: 700;
-          color: var(--primary-color, #03a9f4);
-          white-space: nowrap;
-        }
-        .hero-label { font-size: 0.8em; color: var(--secondary-text-color); margin-bottom: 2px; }
-        .hero-sub { font-size: 0.8em; color: var(--secondary-text-color); margin-bottom: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
-        .hero-remain { color: var(--warning-color, #ff9800); }
-        .amort-bar-wrap { }
-        .amort-bar-track {
-          height: 6px; border-radius: 3px;
-          background: var(--divider-color, #e0e0e0); overflow: hidden;
-        }
-        .amort-bar-fill {
-          height: 100%; border-radius: 3px;
-          background: var(--primary-color, #03a9f4);
-          transition: width .6s ease;
-        }
-
-        /* Kacheln */
-        .tiles {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 8px;
-          margin-bottom: 12px;
-        }
-        .tile {
-          background: var(--secondary-background-color, #f5f5f5);
-          border-radius: 8px; padding: 8px 6px;
-          text-align: center;
-        }
-        .tile-val { font-size: 0.95em; font-weight: 600; color: var(--primary-text-color); }
-        .tile-lbl { font-size: 0.72em; color: var(--secondary-text-color); margin-top: 2px; }
-
-        /* Abschnitte */
-        .section { margin-top: 10px; }
-        .section-title {
-          font-size: 0.78em; font-weight: 600; letter-spacing: 0.03em;
-          text-transform: uppercase; color: var(--secondary-text-color);
-          margin-bottom: 6px;
-        }
-
-        /* Stacked Bar */
-        .stack-bar {
-          height: 12px; border-radius: 6px; overflow: hidden;
-          display: flex; gap: 2px;
-        }
-        .stack-seg { height: 100%; transition: width .5s ease; border-radius: 3px; }
-        .seg-blue  { background: var(--primary-color, #03a9f4); }
-        .seg-green { background: var(--success-color, #4caf50); }
-        .seg-orange{ background: #ff9800; }
-        .stack-legend {
-          display: flex; gap: 12px; flex-wrap: wrap;
-          font-size: 0.78em; color: var(--secondary-text-color); margin-top: 5px;
-        }
-        .stack-legend span { display: flex; align-items: center; gap: 4px; }
-        .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
-        .dot-blue   { background: var(--primary-color, #03a9f4); }
-        .dot-green  { background: var(--success-color, #4caf50); }
-        .dot-orange { background: #ff9800; }
-
-        /* Chart */
-        .chart-wrap { width: 100%; overflow-x: auto; }
-        .chart-msg {
-          font-size: 0.82em; color: var(--secondary-text-color);
-          padding: 8px 0; text-align: center;
-        }
-
-        /* Sonstiges */
-        .empty { padding: 24px 16px; text-align: center; color: var(--secondary-text-color); }
-      </style>
-      ${inner}
-    `;
+    this._root.innerHTML = `<style>
+      :host{display:block}
+      .card-header{padding:12px 16px 0;font-size:1.1em;font-weight:600;
+        color:var(--ha-card-header-color,var(--primary-text-color))}
+      .content{padding:8px 16px 16px}
+      /* Hero */
+      .hero{display:flex;align-items:center;gap:16px;margin-bottom:12px}
+      .donut{width:90px;height:90px;flex-shrink:0}
+      .hero-text{flex:1;min-width:0}
+      .hero-total{font-size:1.9em;font-weight:700;color:var(--primary-color,#03a9f4);white-space:nowrap}
+      .hero-label{font-size:.8em;color:var(--secondary-text-color);margin-bottom:2px}
+      .hero-sub{font-size:.8em;color:var(--secondary-text-color);display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+      .hero-remain{color:var(--warning-color,#ff9800)}
+      .amort-track{height:6px;border-radius:3px;background:var(--divider-color,#e0e0e0);overflow:hidden}
+      .amort-fill{height:100%;border-radius:3px;background:var(--primary-color,#03a9f4);transition:width .6s ease}
+      /* Kacheln */
+      .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+      .tile{background:var(--secondary-background-color,#f5f5f5);border-radius:8px;padding:8px 6px;text-align:center}
+      .tile-val{font-size:.95em;font-weight:600;color:var(--primary-text-color)}
+      .tile-lbl{font-size:.72em;color:var(--secondary-text-color);margin-top:2px}
+      /* Abschnitte */
+      .section{margin-top:10px}
+      .section-title{font-size:.78em;font-weight:600;letter-spacing:.03em;text-transform:uppercase;
+        color:var(--secondary-text-color);margin-bottom:6px}
+      /* Stacked Bar */
+      .stack-bar{height:12px;border-radius:6px;overflow:hidden;display:flex;gap:2px}
+      .stack-seg{height:100%;transition:width .5s ease;border-radius:3px}
+      .seg-blue{background:var(--primary-color,#03a9f4)}
+      .seg-green{background:var(--success-color,#4caf50)}
+      .seg-orange{background:#ff9800}
+      .stack-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:.78em;
+        color:var(--secondary-text-color);margin-top:5px}
+      .stack-legend span{display:flex;align-items:center;gap:4px}
+      .dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex-shrink:0}
+      .dot-blue{background:var(--primary-color,#03a9f4)}
+      .dot-green{background:var(--success-color,#4caf50)}
+      .dot-orange{background:#ff9800}
+      .dot-grey{background:var(--secondary-text-color,#9e9e9e)}
+      /* Energie-Zeilen */
+      .energy-rows{display:flex;flex-direction:column;gap:4px}
+      .energy-row{display:flex;align-items:center;gap:6px;font-size:.85em}
+      .energy-lbl{flex:1;color:var(--secondary-text-color)}
+      .energy-val{font-weight:500;color:var(--primary-text-color)}
+      /* Chart */
+      .chart-wrap{width:100%;overflow-x:auto}
+      .chart-msg{font-size:.82em;color:var(--secondary-text-color);padding:8px 0;text-align:center}
+      /* Misc */
+      .empty{padding:24px 16px;text-align:center;color:var(--secondary-text-color)}
+    </style>${inner}`;
   }
 }
 
-// ─── Grafischer Editor ────────────────────────────────────────────────────────
+// ─── Editor ───────────────────────────────────────────────────────────────────
 
 class RoiTrackerCardEditor extends HTMLElement {
-  setConfig(config) {
-    this._config = { ...config };
-    this._render();
-  }
-
-  set hass(hass) {
-    this._hass = hass;
-    this._render();
-  }
+  setConfig(config) { this._config = { ...config }; this._render(); }
+  set hass(hass) { this._hass = hass; this._render(); }
 
   _render() {
     if (!this._hass) return;
     const lang = (this._hass.language || "de").startsWith("de") ? "de" : "en";
     const t = TXT[lang];
     const cfg = this._config;
-
     const devices = this._hass.devices || {};
     const entities = this._hass.entities || {};
-    const roiDeviceIds = new Set();
-    for (const ent of Object.values(entities)) {
-      if (ent.platform === "roi_tracker" && ent.device_id) roiDeviceIds.add(ent.device_id);
+    const roiIds = new Set();
+    for (const e of Object.values(entities)) {
+      if (e.platform === "roi_tracker" && e.device_id) roiIds.add(e.device_id);
     }
-
     if (!this._root) this._root = this.attachShadow({ mode: "open" });
 
-    const options = [...roiDeviceIds].map(id => {
+    const opts = [...roiIds].map(id => {
       const d = devices[id] || {};
       const name = d.name_by_user || d.name || id;
-      const sel = cfg.device === id ? "selected" : "";
-      return `<option value="${id}" ${sel}>${name}</option>`;
+      return `<option value="${id}" ${cfg.device === id ? "selected" : ""}>${name}</option>`;
     }).join("");
 
-    const chkChart = cfg.show_chart !== false ? "checked" : "";
-    const chkBreakdown = cfg.show_breakdown !== false ? "checked" : "";
+    const chk = (key, def = true) =>
+      `<input id="chk-${key}" type="checkbox" ${cfg[key] !== false && (cfg[key] !== undefined || def) ? "checked" : ""}/>`;
 
-    this._root.innerHTML = `
-      <style>
-        .form { padding: 8px; display: flex; flex-direction: column; gap: 12px; }
-        label { font-size: 0.85em; color: var(--secondary-text-color); display: block; margin-bottom: 4px; }
-        select, input[type=text] {
-          width: 100%; padding: 8px; box-sizing: border-box;
-          border: 1px solid var(--divider-color,#ccc); border-radius: 6px;
-          background: var(--card-background-color); color: var(--primary-text-color);
-        }
-        .row-check { display: flex; align-items: center; gap: 8px; font-size: 0.9em; }
-      </style>
-      <div class="form">
-        <div>
-          <label>${t.pick_device}</label>
-          <select id="device">
-            <option value="">— ${t.no_device} —</option>
-            ${options}
-          </select>
-        </div>
-        <div>
-          <label>Titel / Title</label>
-          <input id="title" type="text" value="${cfg.title || ""}" />
-        </div>
-        <div class="row-check">
-          <input id="chk-chart" type="checkbox" ${chkChart}/>
-          <label style="margin:0">${lang === "de" ? "Monatsbalken anzeigen" : "Show monthly chart"}</label>
-        </div>
-        <div class="row-check">
-          <input id="chk-breakdown" type="checkbox" ${chkBreakdown}/>
-          <label style="margin:0">${lang === "de" ? "Aufschlüsselung anzeigen" : "Show breakdown bar"}</label>
-        </div>
+    this._root.innerHTML = `<style>
+      .form{padding:8px;display:flex;flex-direction:column;gap:12px}
+      label{font-size:.85em;color:var(--secondary-text-color);display:block;margin-bottom:4px}
+      select,input[type=text]{width:100%;padding:8px;box-sizing:border-box;
+        border:1px solid var(--divider-color,#ccc);border-radius:6px;
+        background:var(--card-background-color);color:var(--primary-text-color)}
+      .row-check{display:flex;align-items:center;gap:8px;font-size:.9em}
+    </style>
+    <div class="form">
+      <div>
+        <label>${t.pick_device}</label>
+        <select id="device"><option value="">— ${t.no_device} —</option>${opts}</select>
       </div>
-    `;
+      <div>
+        <label>Titel / Title</label>
+        <input id="title" type="text" value="${cfg.title || ""}"/>
+      </div>
+      <div class="row-check">${chk("show_chart")}
+        <label style="margin:0">${lang === "de" ? "Monatsbalken anzeigen" : "Show monthly chart"}</label></div>
+      <div class="row-check">${chk("show_breakdown")}
+        <label style="margin:0">${lang === "de" ? "Aufschlüsselung anzeigen" : "Show breakdown"}</label></div>
+      <div class="row-check">${chk("show_energy")}
+        <label style="margin:0">${lang === "de" ? "kWh-Statistiken anzeigen" : "Show energy stats"}</label></div>
+    </div>`;
 
     this._root.getElementById("device").addEventListener("change", e =>
       this._emit({ ...this._config, device: e.target.value }));
     this._root.getElementById("title").addEventListener("input", e =>
       this._emit({ ...this._config, title: e.target.value }));
-    this._root.getElementById("chk-chart").addEventListener("change", e =>
-      this._emit({ ...this._config, show_chart: e.target.checked }));
-    this._root.getElementById("chk-breakdown").addEventListener("change", e =>
-      this._emit({ ...this._config, show_breakdown: e.target.checked }));
+    ["show_chart", "show_breakdown", "show_energy"].forEach(k => {
+      this._root.getElementById(`chk-${k}`).addEventListener("change", e =>
+        this._emit({ ...this._config, [k]: e.target.checked }));
+    });
   }
 
   _emit(config) {
@@ -607,13 +573,13 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "roi-tracker-card",
   name: "ROI Tracker Card",
-  description: "Amortisation, Ersparnis & ROI mit Donut, Aufschlüsselung und Monatsbalken / Amortization, savings & ROI with donut, breakdown bar and monthly chart.",
+  description: "PV-Amortisation, Ersparnis & Prognose mit Donut, Aufschlüsselung und Monatshistogramm.",
   preview: true,
   documentationURL: "https://github.com/pxljake/roi-tracker",
 });
 
 console.info(
-  "%c ROI-TRACKER-CARD %c v0.2.0 ",
+  "%c ROI-TRACKER-CARD %c v0.2.1 ",
   "color:#fff;background:#03a9f4;font-weight:700;",
   "color:#03a9f4;background:#fff;font-weight:700;"
 );
