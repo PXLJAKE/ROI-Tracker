@@ -494,73 +494,94 @@ class RoiTrackerCard extends HTMLElement {
 }
 
 // ─── Editor ───────────────────────────────────────────────────────────────────
+// Nutzt HA's eingebaute <ha-selector> und <ha-textfield> Elemente.
+// ha-selector mit { device: { integration: "roi_tracker" } } zeigt automatisch
+// nur ROI-Tracker-Geräte an – kein manuelles Entity-Registry-Suchen nötig.
 
 class RoiTrackerCardEditor extends HTMLElement {
   constructor() {
     super();
-    this._config = {};  // immer initialisiert, nie undefined
+    this._config = {};
     this._hass = null;
-    this._root = null;
   }
 
-  setConfig(config) { this._config = { ...config }; this._render(); }
-  set hass(hass) { this._hass = hass; this._render(); }
+  setConfig(config) {
+    this._config = config || {};
+    this._render();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._render();
+  }
 
   _render() {
-    if (!this._hass || !this._config) return;
+    if (!this._hass) return;
+
     const lang = (this._hass.language || "de").startsWith("de") ? "de" : "en";
-    const t = TXT[lang];
-    const cfg = this._config;
-    const devices = this._hass.devices || {};
-    const entities = this._hass.entities || {};
-    const roiIds = new Set();
-    for (const e of Object.values(entities)) {
-      if (e.platform === "roi_tracker" && e.device_id) roiIds.add(e.device_id);
+    const cfg = this._config || {};
+
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const root = this.shadowRoot;
+
+    // Nur beim ersten Mal das Grundgerüst bauen
+    if (!root.querySelector(".form")) {
+      root.innerHTML = `
+        <style>
+          .form { display:flex; flex-direction:column; gap:16px; padding:8px; }
+          .row { display:flex; flex-direction:column; gap:4px; }
+          .row-check { display:flex; align-items:center; gap:10px; cursor:pointer; }
+          .row-check label { font-size:.9em; color:var(--primary-text-color); cursor:pointer; }
+          ha-selector, ha-textfield { display:block; width:100%; }
+        </style>
+        <div class="form">
+          <div class="row" id="row-device"></div>
+          <div class="row" id="row-title"></div>
+          <div class="row-check">
+            <ha-checkbox id="chk-chart"></ha-checkbox>
+            <label for="chk-chart">${lang === "de" ? "Monatsbalken" : "Monthly chart"}</label>
+          </div>
+          <div class="row-check">
+            <ha-checkbox id="chk-breakdown"></ha-checkbox>
+            <label for="chk-breakdown">${lang === "de" ? "Aufschlüsselung" : "Breakdown bar"}</label>
+          </div>
+          <div class="row-check">
+            <ha-checkbox id="chk-energy"></ha-checkbox>
+            <label for="chk-energy">${lang === "de" ? "kWh-Statistiken" : "Energy stats"}</label>
+          </div>
+        </div>`;
+
+      // Device-Selector (HA built-in, filtert automatisch nach Integration)
+      const deviceSel = document.createElement("ha-selector");
+      deviceSel.label = lang === "de" ? "Anlage (ROI Tracker Gerät)" : "Asset (ROI Tracker device)";
+      deviceSel.selector = { device: { integration: "roi_tracker" } };
+      deviceSel.addEventListener("value-changed", (e) =>
+        this._emit({ ...this._config, device: e.detail.value }));
+      root.getElementById("row-device").appendChild(deviceSel);
+      this._deviceSel = deviceSel;
+
+      // Titel-Feld
+      const titleField = document.createElement("ha-textfield");
+      titleField.label = "Titel / Title";
+      titleField.addEventListener("change", (e) =>
+        this._emit({ ...this._config, title: e.target.value }));
+      root.getElementById("row-title").appendChild(titleField);
+      this._titleField = titleField;
+
+      // Checkboxen
+      for (const id of ["chart", "breakdown", "energy"]) {
+        root.getElementById(`chk-${id}`).addEventListener("change", (e) =>
+          this._emit({ ...this._config, [`show_${id}`]: e.target.checked }));
+      }
     }
-    if (!this._root) this._root = this.attachShadow({ mode: "open" });
 
-    const opts = [...roiIds].map(id => {
-      const d = devices[id] || {};
-      const name = d.name_by_user || d.name || id;
-      return `<option value="${id}" ${cfg.device === id ? "selected" : ""}>${name}</option>`;
-    }).join("");
-
-    const chk = (key, def = true) =>
-      `<input id="chk-${key}" type="checkbox" ${cfg[key] !== false && (cfg[key] !== undefined || def) ? "checked" : ""}/>`;
-
-    this._root.innerHTML = `<style>
-      .form{padding:8px;display:flex;flex-direction:column;gap:12px}
-      label{font-size:.85em;color:var(--secondary-text-color);display:block;margin-bottom:4px}
-      select,input[type=text]{width:100%;padding:8px;box-sizing:border-box;
-        border:1px solid var(--divider-color,#ccc);border-radius:6px;
-        background:var(--card-background-color);color:var(--primary-text-color)}
-      .row-check{display:flex;align-items:center;gap:8px;font-size:.9em}
-    </style>
-    <div class="form">
-      <div>
-        <label>${t.pick_device}</label>
-        <select id="device"><option value="">— ${t.no_device} —</option>${opts}</select>
-      </div>
-      <div>
-        <label>Titel / Title</label>
-        <input id="title" type="text" value="${cfg.title || ""}"/>
-      </div>
-      <div class="row-check">${chk("show_chart")}
-        <label style="margin:0">${lang === "de" ? "Monatsbalken anzeigen" : "Show monthly chart"}</label></div>
-      <div class="row-check">${chk("show_breakdown")}
-        <label style="margin:0">${lang === "de" ? "Aufschlüsselung anzeigen" : "Show breakdown"}</label></div>
-      <div class="row-check">${chk("show_energy")}
-        <label style="margin:0">${lang === "de" ? "kWh-Statistiken anzeigen" : "Show energy stats"}</label></div>
-    </div>`;
-
-    this._root.getElementById("device").addEventListener("change", e =>
-      this._emit({ ...this._config, device: e.target.value }));
-    this._root.getElementById("title").addEventListener("input", e =>
-      this._emit({ ...this._config, title: e.target.value }));
-    ["show_chart", "show_breakdown", "show_energy"].forEach(k => {
-      this._root.getElementById(`chk-${k}`).addEventListener("change", e =>
-        this._emit({ ...this._config, [k]: e.target.checked }));
-    });
+    // Werte aktualisieren (bei jedem hass/config-Update)
+    this._deviceSel.hass = this._hass;
+    this._deviceSel.value = cfg.device || "";
+    this._titleField.value = cfg.title || "";
+    root.getElementById("chk-chart").checked = cfg.show_chart !== false;
+    root.getElementById("chk-breakdown").checked = cfg.show_breakdown !== false;
+    root.getElementById("chk-energy").checked = cfg.show_energy !== false;
   }
 
   _emit(config) {
