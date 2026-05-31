@@ -21,7 +21,8 @@
           "battery_discharge_sensor": "Aus Batterie entnommen (kWh, kumuliert)",
           "grid_import_sensor": "Netzbezug (kWh, kumuliert) – optional",
           "price_mode": "Woher kommt dein Strompreis (Bezug)?",
-          "reward_mode": "Woher kommt deine Einspeisevergütung?"
+          "reward_mode": "Woher kommt deine Einspeisevergütung?",
+          "sensor_reset_daily": "Sensoren setzen täglich/monatlich zurück"
         },
         "data_description": {
           "investment": "Einmalige Investitionssumme in €, die sich amortisieren soll (z. B. 20000).",
@@ -30,7 +31,8 @@
           "export_sensor": "Die ins Netz eingespeiste Energie in kWh. Menge × Einspeisevergütung = dein Einspeiseertrag.",
           "battery_discharge_sensor": "Aus der Batterie entnommene Energie in kWh. Wird wie Eigenverbrauch als Ersparnis gewertet.",
           "grid_import_sensor": "Optional: kumulierter Netzbezug in kWh (z. B. Tibber oder Smartmeter). Wird NICHT vom ROI abgezogen – dient nur der transparenten Anzeige, wie viel du noch aus dem Netz beziehst.",
-          "price_mode": "Bestimmt, wie der Geldwert deines Eigenverbrauchs berechnet wird."
+          "price_mode": "Bestimmt, wie der Geldwert deines Eigenverbrauchs berechnet wird.",
+          "sensor_reset_daily": "Aktivieren wenn deine Sensoren nicht dauerhaft kumulieren, sondern täglich (z. B. Tagesertrag) oder monatlich zurücksetzen. Der Integrator zählt dann korrekt weiter, auch über den Reset hinaus."
         }
       },
       "sources": {
@@ -124,7 +126,11 @@
       "self_sufficiency": { "name": "Eigenverbrauchsquote" },
       "daily_average": { "name": "Tages-Ø Rückfluss" },
       "monthly_estimate": { "name": "Monatliche Prognose" },
-      "grid_import_cost": { "name": "Netzbezug (Kosten)" }
+      "grid_import_cost": { "name": "Netzbezug (Kosten)" },
+      "total_consumption_kwh": { "name": "Eigenverbrauch gesamt (kWh)" },
+      "total_export_kwh": { "name": "Einspeisung gesamt (kWh)" },
+      "total_battery_discharge_kwh": { "name": "Batterie-Entladung gesamt (kWh)" },
+      "grid_import_kwh": { "name": "Netzbezug gesamt (kWh)" }
     }
   },
   "services": {

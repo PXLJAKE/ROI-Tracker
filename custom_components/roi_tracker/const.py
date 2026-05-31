@@ -31,6 +31,9 @@ CONF_REWARD_MODE: Final = "reward_mode"    # fixed | sensor | none
 CONF_REWARD_FIXED: Final = "reward_fixed"  # €/kWh
 CONF_REWARD_SENSOR: Final = "reward_sensor"
 
+# Sensor-Verhalten
+CONF_SENSOR_RESET_DAILY: Final = "sensor_reset_daily"  # True = Sensoren setzen täglich zurück
+
 # Nur für TEMPLATE_CUSTOM: manueller Vergleichswert
 CONF_BASELINE_RATE: Final = "baseline_rate"  # €/Einheit Alt-Lösung
 CONF_UNIT: Final = "unit"
@@ -94,6 +97,11 @@ SENSOR_ROI_PERCENT: Final = "roi_percent"
 SENSOR_DAILY_AVERAGE: Final = "daily_average"
 SENSOR_MONTHLY_ESTIMATE: Final = "monthly_estimate"
 SENSOR_GRID_IMPORT_COST: Final = "grid_import_cost"
+# Permanente kWh-Summier-Sensoren (akkumulieren auch über Reset-Sensoren hinweg)
+SENSOR_TOTAL_CONSUMPTION_KWH: Final = "total_consumption_kwh"
+SENSOR_TOTAL_EXPORT_KWH: Final = "total_export_kwh"
+SENSOR_TOTAL_BATTERY_DISCHARGE_KWH: Final = "total_battery_discharge_kwh"
+SENSOR_GRID_IMPORT_KWH: Final = "grid_import_kwh"
 
 # --- Sonstiges --------------------------------------------------------------
 
