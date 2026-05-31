@@ -1,5 +1,5 @@
 /**
- * ROI Tracker Card  v0.2.1
+ * ROI Tracker Card  v0.2.6
  *
  * Konfiguration:
  *   type: custom:roi-tracker-card
@@ -494,9 +494,9 @@ class RoiTrackerCard extends HTMLElement {
 }
 
 // ─── Editor ───────────────────────────────────────────────────────────────────
-// Nutzt HA's eingebaute <ha-selector> und <ha-textfield> Elemente.
-// ha-selector mit { device: { integration: "roi_tracker" } } zeigt automatisch
-// nur ROI-Tracker-Geräte an – kein manuelles Entity-Registry-Suchen nötig.
+// Bewusst reines HTML: keine Abhängigkeit von ha-selector/ha-textfield, die im
+// Editor-Kontext nicht garantiert geladen sind. Geräte werden direkt aus
+// hass.devices (identifiers) UND hass.entities (platform) ermittelt.
 
 class RoiTrackerCardEditor extends HTMLElement {
   constructor() {
@@ -515,73 +515,114 @@ class RoiTrackerCardEditor extends HTMLElement {
     this._render();
   }
 
-  _render() {
-    if (!this._hass) return;
+  /** Findet alle ROI-Tracker-Geräte: {id, name}. Robust über zwei Quellen. */
+  _roiDevices() {
+    const found = new Map();  // id -> name
+    const hass = this._hass;
+    if (!hass) return [];
 
-    const lang = (this._hass.language || "de").startsWith("de") ? "de" : "en";
-    const cfg = this._config || {};
+    const devices = hass.devices || {};
+    const entities = hass.entities || {};
 
-    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
-    const root = this.shadowRoot;
+    // Quelle 1: device-registry über identifiers [["roi_tracker", ...]]
+    for (const [id, dev] of Object.entries(devices)) {
+      const ids = dev && dev.identifiers ? dev.identifiers : [];
+      const isRoi = ids.some((pair) => Array.isArray(pair) && pair[0] === "roi_tracker");
+      if (isRoi) found.set(id, dev.name_by_user || dev.name || id);
+    }
 
-    // Nur beim ersten Mal das Grundgerüst bauen
-    if (!root.querySelector(".form")) {
-      root.innerHTML = `
-        <style>
-          .form { display:flex; flex-direction:column; gap:16px; padding:8px; }
-          .row { display:flex; flex-direction:column; gap:4px; }
-          .row-check { display:flex; align-items:center; gap:10px; cursor:pointer; }
-          .row-check label { font-size:.9em; color:var(--primary-text-color); cursor:pointer; }
-          ha-selector, ha-textfield { display:block; width:100%; }
-        </style>
-        <div class="form">
-          <div class="row" id="row-device"></div>
-          <div class="row" id="row-title"></div>
-          <div class="row-check">
-            <ha-checkbox id="chk-chart"></ha-checkbox>
-            <label for="chk-chart">${lang === "de" ? "Monatsbalken" : "Monthly chart"}</label>
-          </div>
-          <div class="row-check">
-            <ha-checkbox id="chk-breakdown"></ha-checkbox>
-            <label for="chk-breakdown">${lang === "de" ? "Aufschlüsselung" : "Breakdown bar"}</label>
-          </div>
-          <div class="row-check">
-            <ha-checkbox id="chk-energy"></ha-checkbox>
-            <label for="chk-energy">${lang === "de" ? "kWh-Statistiken" : "Energy stats"}</label>
-          </div>
-        </div>`;
-
-      // Device-Selector (HA built-in, filtert automatisch nach Integration)
-      const deviceSel = document.createElement("ha-selector");
-      deviceSel.label = lang === "de" ? "Anlage (ROI Tracker Gerät)" : "Asset (ROI Tracker device)";
-      deviceSel.selector = { device: { integration: "roi_tracker" } };
-      deviceSel.addEventListener("value-changed", (e) =>
-        this._emit({ ...this._config, device: e.detail.value }));
-      root.getElementById("row-device").appendChild(deviceSel);
-      this._deviceSel = deviceSel;
-
-      // Titel-Feld
-      const titleField = document.createElement("ha-textfield");
-      titleField.label = "Titel / Title";
-      titleField.addEventListener("change", (e) =>
-        this._emit({ ...this._config, title: e.target.value }));
-      root.getElementById("row-title").appendChild(titleField);
-      this._titleField = titleField;
-
-      // Checkboxen
-      for (const id of ["chart", "breakdown", "energy"]) {
-        root.getElementById(`chk-${id}`).addEventListener("change", (e) =>
-          this._emit({ ...this._config, [`show_${id}`]: e.target.checked }));
+    // Quelle 2: entity-registry über platform === "roi_tracker"
+    for (const ent of Object.values(entities)) {
+      if (ent && ent.platform === "roi_tracker" && ent.device_id && !found.has(ent.device_id)) {
+        const dev = devices[ent.device_id] || {};
+        found.set(ent.device_id, dev.name_by_user || dev.name || ent.device_id);
       }
     }
 
-    // Werte aktualisieren (bei jedem hass/config-Update)
-    this._deviceSel.hass = this._hass;
-    this._deviceSel.value = cfg.device || "";
-    this._titleField.value = cfg.title || "";
-    root.getElementById("chk-chart").checked = cfg.show_chart !== false;
-    root.getElementById("chk-breakdown").checked = cfg.show_breakdown !== false;
-    root.getElementById("chk-energy").checked = cfg.show_energy !== false;
+    return [...found.entries()].map(([id, name]) => ({ id, name }));
+  }
+
+  _render() {
+    try {
+      this._renderInner();
+    } catch (err) {
+      // Editor darf niemals crashen – sonst "Configuration error"
+      if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+      this.shadowRoot.innerHTML =
+        `<div style="padding:12px;color:var(--error-color,#db4437)">
+           Editor-Fehler: ${err && err.message ? err.message : err}
+         </div>`;
+    }
+  }
+
+  _renderInner() {
+    if (!this._hass) return;
+    const lang = (this._hass.language || "de").startsWith("de") ? "de" : "en";
+    const cfg = this._config || {};
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const root = this.shadowRoot;
+
+    const devices = this._roiDevices();
+    const noDevices = lang === "de"
+      ? "Keine ROI-Tracker-Anlage gefunden – zuerst die Integration einrichten."
+      : "No ROI Tracker asset found – set up the integration first.";
+
+    const options = [`<option value="">${lang === "de" ? "— Anlage wählen —" : "— Select asset —"}</option>`]
+      .concat(devices.map((d) =>
+        `<option value="${d.id}" ${cfg.device === d.id ? "selected" : ""}>${d.name}</option>`
+      )).join("");
+
+    const checked = (key) => (cfg[key] !== false ? "checked" : "");
+
+    root.innerHTML = `
+      <style>
+        .form { display:flex; flex-direction:column; gap:14px; padding:8px; }
+        .row label { display:block; font-size:.85em; color:var(--secondary-text-color); margin-bottom:4px; }
+        select, input[type=text] {
+          width:100%; padding:9px; box-sizing:border-box; font-size:1em;
+          border:1px solid var(--divider-color,#ccc); border-radius:6px;
+          background:var(--card-background-color,#fff); color:var(--primary-text-color);
+        }
+        .hint { font-size:.8em; color:var(--warning-color,#ff9800); margin-top:4px; }
+        .row-check { display:flex; align-items:center; gap:10px; }
+        .row-check input { width:18px; height:18px; }
+        .row-check label { font-size:.9em; color:var(--primary-text-color); margin:0; }
+      </style>
+      <div class="form">
+        <div class="row">
+          <label>${lang === "de" ? "Anlage (ROI Tracker Gerät)" : "Asset (ROI Tracker device)"}</label>
+          <select id="device">${options}</select>
+          ${devices.length === 0 ? `<div class="hint">${noDevices}</div>` : ""}
+        </div>
+        <div class="row">
+          <label>${lang === "de" ? "Titel (optional)" : "Title (optional)"}</label>
+          <input id="title" type="text" value="${(cfg.title || "").replace(/"/g, "&quot;")}"
+            placeholder="ROI Tracker"/>
+        </div>
+        <div class="row-check">
+          <input id="chk-chart" type="checkbox" ${checked("show_chart")}/>
+          <label for="chk-chart">${lang === "de" ? "Monatsbalken anzeigen" : "Show monthly chart"}</label>
+        </div>
+        <div class="row-check">
+          <input id="chk-breakdown" type="checkbox" ${checked("show_breakdown")}/>
+          <label for="chk-breakdown">${lang === "de" ? "Aufschlüsselung anzeigen" : "Show breakdown"}</label>
+        </div>
+        <div class="row-check">
+          <input id="chk-energy" type="checkbox" ${checked("show_energy")}/>
+          <label for="chk-energy">${lang === "de" ? "kWh-Statistiken anzeigen" : "Show energy stats"}</label>
+        </div>
+      </div>`;
+
+    root.getElementById("device").addEventListener("change", (e) =>
+      this._emit({ ...this._config, device: e.target.value }));
+    root.getElementById("title").addEventListener("input", (e) =>
+      this._emit({ ...this._config, title: e.target.value }));
+    root.getElementById("chk-chart").addEventListener("change", (e) =>
+      this._emit({ ...this._config, show_chart: e.target.checked }));
+    root.getElementById("chk-breakdown").addEventListener("change", (e) =>
+      this._emit({ ...this._config, show_breakdown: e.target.checked }));
+    root.getElementById("chk-energy").addEventListener("change", (e) =>
+      this._emit({ ...this._config, show_energy: e.target.checked }));
   }
 
   _emit(config) {
@@ -607,7 +648,7 @@ window.customCards.push({
 });
 
 console.info(
-  "%c ROI-TRACKER-CARD %c v0.2.1 ",
+  "%c ROI-TRACKER-CARD %c v0.2.6 ",
   "color:#fff;background:#03a9f4;font-weight:700;",
   "color:#03a9f4;background:#fff;font-weight:700;"
 );
