@@ -35,8 +35,36 @@ CONF_REWARD_FIXED: Final = "reward_fixed"  # €/Einheit
 CONF_REWARD_SENSOR: Final = "reward_sensor"  # € (fertiger Ertrags-Sensor)
 
 # Vergleich/Referenz (z. B. bei E-Auto: alter Verbrenner-Verbrauch)
-CONF_BASELINE_RATE: Final = "baseline_rate"  # Kosten der Alt-Lösung pro Einheit
+CONF_BASELINE_RATE: Final = "baseline_rate"  # Kosten der Alt-Lösung pro Einheit (manuell)
 CONF_UNIT: Final = "unit"  # Anzeige-Einheit der Menge
+
+# Altlösungs-Vergleich (zerlegt, nur für EV und Heizung)
+CONF_LEGACY_CONSUMPTION: Final = "legacy_consumption"  # z. B. 8,5 L/100km oder L/m²/Jahr
+CONF_LEGACY_FUEL_TYPE: Final = "legacy_fuel_type"      # Kraftstoff-/Heizmittelart
+CONF_FUEL_PRICE_FIXED: Final = "fuel_price_fixed"      # Kraftstoffpreis fester Wert (€/Einheit)
+CONF_FUEL_PRICE_SENSOR: Final = "fuel_price_sensor"    # Sensor für Kraftstoffpreis
+
+# --- Kraftstoff-/Heizmittelarten --------------------------------------------
+
+FUEL_DIESEL: Final = "diesel"
+FUEL_BENZIN: Final = "benzin"
+FUEL_LPG: Final = "lpg"
+FUEL_CNG: Final = "cng"
+FUEL_ERDGAS: Final = "erdgas"
+FUEL_OEL: Final = "oel"
+FUEL_PELLETS: Final = "pellets"
+FUEL_FERNWAERME: Final = "fernwaerme"
+
+FUEL_TYPES: Final = [
+    FUEL_DIESEL,
+    FUEL_BENZIN,
+    FUEL_LPG,
+    FUEL_CNG,
+    FUEL_ERDGAS,
+    FUEL_OEL,
+    FUEL_PELLETS,
+    FUEL_FERNWAERME,
+]
 
 # --- Preis-Modi -------------------------------------------------------------
 
@@ -75,13 +103,14 @@ TEMPLATE_DEFAULTS: Final = {
         "has_reward": True,
     },
     TEMPLATE_EV: {
-        "unit": "kWh",
-        "currency_unit": "€/kWh",
+        "unit": "km",
+        "currency_unit": "€/km",
         "fields": [
             CONF_CONSUMPTION_SENSOR,
         ],
         "has_reward": False,
-        "has_baseline": True,  # Vergleich mit Verbrenner-Kosten
+        "has_baseline": False,
+        "has_legacy": True,   # Vergleich mit altem Verbrenner (zerlegt)
     },
     TEMPLATE_HEATING: {
         "unit": "kWh",
@@ -90,7 +119,8 @@ TEMPLATE_DEFAULTS: Final = {
             CONF_CONSUMPTION_SENSOR,
         ],
         "has_reward": False,
-        "has_baseline": True,  # Vergleich mit alter Heizung
+        "has_baseline": False,
+        "has_legacy": True,   # Vergleich mit alter Heizung (zerlegt)
     },
     TEMPLATE_CUSTOM: {
         "unit": "kWh",

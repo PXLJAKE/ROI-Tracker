@@ -30,7 +30,11 @@ from .const import (
     CONF_CONSUMPTION_SENSOR,
     CONF_COST_SENSOR,
     CONF_EXPORT_SENSOR,
+    CONF_FUEL_PRICE_FIXED,
+    CONF_FUEL_PRICE_SENSOR,
     CONF_INVESTMENT,
+    CONF_LEGACY_CONSUMPTION,
+    CONF_LEGACY_FUEL_TYPE,
     CONF_NAME,
     CONF_PRICE_FIXED,
     CONF_PRICE_MODE,
@@ -42,6 +46,7 @@ from .const import (
     CONF_START_DATE,
     CONF_TEMPLATE,
     DOMAIN,
+    FUEL_TYPES,
     PRICE_MODE_COST_SENSOR,
     PRICE_MODE_FIXED,
     PRICE_MODE_NONE,
@@ -76,6 +81,28 @@ _INVEST_SELECTOR = selector.NumberSelector(
         min=0, step=0.01, mode=selector.NumberSelectorMode.BOX, unit_of_measurement="€"
     )
 )
+
+
+_LEGACY_CONSUMPTION = selector.NumberSelector(
+    selector.NumberSelectorConfig(
+        min=0, step="any", mode=selector.NumberSelectorMode.BOX
+    )
+)
+_FUEL_PRICE_SELECTOR = selector.NumberSelector(
+    selector.NumberSelectorConfig(
+        min=0, step="any", mode=selector.NumberSelectorMode.BOX, unit_of_measurement="€/L"
+    )
+)
+
+
+def _fuel_type_selector() -> selector.Selector:
+    return selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=FUEL_TYPES,
+            translation_key="fuel_type",
+            mode=selector.SelectSelectorMode.LIST,
+        )
+    )
 
 
 def _price_mode_selector(include_cost: bool, include_none: bool) -> selector.Selector:
@@ -191,6 +218,22 @@ def _needs_sources_step(price_mode: str, reward_mode: str | None) -> bool:
     return has_price or has_reward
 
 
+def _needs_legacy_step(template: str) -> bool:
+    """Ob der Legacy-Schritt für diese Vorlage angeboten werden soll."""
+    return TEMPLATE_DEFAULTS.get(template, {}).get("has_legacy", False)
+
+
+def _schema_legacy(template: str, defaults: dict[str, Any]) -> vol.Schema:
+    """Schritt 4 (optional): Vergleich mit der Alt-Lösung (EV/Heizung)."""
+    schema: dict[Any, Any] = {
+        _opt(CONF_LEGACY_CONSUMPTION, defaults): _LEGACY_CONSUMPTION,
+        _opt(CONF_LEGACY_FUEL_TYPE, defaults): _fuel_type_selector(),
+        _opt(CONF_FUEL_PRICE_FIXED, defaults): _FUEL_PRICE_SELECTOR,
+        _opt(CONF_FUEL_PRICE_SENSOR, defaults): _ANY_SENSOR,
+    }
+    return vol.Schema(schema)
+
+
 class RoiTrackerConfigFlow(ConfigFlow, domain=DOMAIN):
     """Geführter Dialog zum Anlegen einer Anlage."""
 
@@ -228,6 +271,8 @@ class RoiTrackerConfigFlow(ConfigFlow, domain=DOMAIN):
                 user_input.get(CONF_REWARD_MODE),
             ):
                 return await self.async_step_sources()
+            if _needs_legacy_step(self._template):
+                return await self.async_step_legacy()
             return self.async_create_entry(
                 title=self._data[CONF_NAME], data=self._data
             )
@@ -242,8 +287,28 @@ class RoiTrackerConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Schritt 3: passende Preis-/Vergütungs-Felder."""
+        assert self._template is not None
         price_mode = self._data.get(CONF_PRICE_MODE, PRICE_MODE_FIXED)
         reward_mode = self._data.get(CONF_REWARD_MODE)
+
+        if user_input is not None:
+            self._data.update(user_input)
+            if _needs_legacy_step(self._template):
+                return await self.async_step_legacy()
+            return self.async_create_entry(
+                title=self._data[CONF_NAME], data=self._data
+            )
+
+        return self.async_show_form(
+            step_id="sources",
+            data_schema=_schema_sources(price_mode, reward_mode, {}),
+        )
+
+    async def async_step_legacy(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Schritt 4 (EV/Heizung): Vergleich mit der Alt-Lösung."""
+        assert self._template is not None
 
         if user_input is not None:
             self._data.update(user_input)
@@ -252,8 +317,8 @@ class RoiTrackerConfigFlow(ConfigFlow, domain=DOMAIN):
             )
 
         return self.async_show_form(
-            step_id="sources",
-            data_schema=_schema_sources(price_mode, reward_mode, {}),
+            step_id="legacy",
+            data_schema=_schema_legacy(self._template, {}),
         )
 
     @staticmethod
@@ -287,6 +352,8 @@ class RoiTrackerOptionsFlow(OptionsFlow):
                 user_input.get(CONF_REWARD_MODE),
             ):
                 return await self.async_step_sources()
+            if _needs_legacy_step(self._template):
+                return await self.async_step_legacy()
             return self.async_create_entry(title="", data=self._data)
 
         return self.async_show_form(
@@ -303,9 +370,24 @@ class RoiTrackerOptionsFlow(OptionsFlow):
 
         if user_input is not None:
             self._data.update(user_input)
+            if _needs_legacy_step(self._template):
+                return await self.async_step_legacy()
             return self.async_create_entry(title="", data=self._data)
 
         return self.async_show_form(
             step_id="sources",
             data_schema=_schema_sources(price_mode, reward_mode, self._current),
+        )
+
+    async def async_step_legacy(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Schritt 3 (Optionen): Vergleich mit der Alt-Lösung."""
+        if user_input is not None:
+            self._data.update(user_input)
+            return self.async_create_entry(title="", data=self._data)
+
+        return self.async_show_form(
+            step_id="legacy",
+            data_schema=_schema_legacy(self._template, self._current),
         )
