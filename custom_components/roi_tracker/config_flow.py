@@ -2,11 +2,9 @@
 
 Mehrstufiger Dialog, damit immer nur die wirklich benötigten Felder erscheinen:
 
-  1. Vorlage wählen (PV / E-Auto / Heizung / Benutzerdefiniert)
-  2. Grunddaten: Name, Investition, Startdatum, Mengen-Sensoren und die
-     Auswahl der Preis-/Vergütungs-Quelle (nur die Modus-Auswahl)
-  3. Quellen-Details: je nach gewähltem Modus erscheint genau ein passendes
-     Feld (fester Preis ODER Preis-Sensor ODER €-Wert-Sensor)
+  1. Vorlage wählen (PV / Benutzerdefiniert)
+  2. Grunddaten: Name, Investition, Startdatum, Mengen-Sensoren, Modus-Auswahl
+  3. Quellen-Details: passender Preis-/Vergütungs-Wert
 """
 
 from __future__ import annotations
@@ -30,11 +28,8 @@ from .const import (
     CONF_CONSUMPTION_SENSOR,
     CONF_COST_SENSOR,
     CONF_EXPORT_SENSOR,
-    CONF_FUEL_PRICE_FIXED,
-    CONF_FUEL_PRICE_SENSOR,
+    CONF_GRID_IMPORT_SENSOR,
     CONF_INVESTMENT,
-    CONF_LEGACY_CONSUMPTION,
-    CONF_LEGACY_FUEL_TYPE,
     CONF_NAME,
     CONF_PRICE_FIXED,
     CONF_PRICE_MODE,
@@ -46,7 +41,6 @@ from .const import (
     CONF_START_DATE,
     CONF_TEMPLATE,
     DOMAIN,
-    FUEL_TYPES,
     PRICE_MODE_COST_SENSOR,
     PRICE_MODE_FIXED,
     PRICE_MODE_NONE,
@@ -55,18 +49,14 @@ from .const import (
     TEMPLATES,
 )
 
-# Wiederverwendbare Selektoren -----------------------------------------------
+# ── Selektoren ────────────────────────────────────────────────────────────────
 
-# Energie-Sensor (kWh) – auf Geräte mit Energie-/Mengenwert eingegrenzt wäre zu
-# streng (manche kumulierten Sensoren haben keine device_class), daher alle Sensoren.
 _ENERGY_SENSOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="sensor")
 )
-# €-Sensor (z. B. dynamischer Preis oder kumulierter €-Wert)
 _MONEY_SENSOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="sensor", device_class="monetary")
 )
-# Fallback-€-Sensor ohne device_class-Filter (viele Preis-Sensoren haben keine)
 _ANY_SENSOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="sensor")
 )
@@ -81,28 +71,6 @@ _INVEST_SELECTOR = selector.NumberSelector(
         min=0, step=0.01, mode=selector.NumberSelectorMode.BOX, unit_of_measurement="€"
     )
 )
-
-
-_LEGACY_CONSUMPTION = selector.NumberSelector(
-    selector.NumberSelectorConfig(
-        min=0, step="any", mode=selector.NumberSelectorMode.BOX
-    )
-)
-_FUEL_PRICE_SELECTOR = selector.NumberSelector(
-    selector.NumberSelectorConfig(
-        min=0, step="any", mode=selector.NumberSelectorMode.BOX, unit_of_measurement="€/L"
-    )
-)
-
-
-def _fuel_type_selector() -> selector.Selector:
-    return selector.SelectSelector(
-        selector.SelectSelectorConfig(
-            options=FUEL_TYPES,
-            translation_key="fuel_type",
-            mode=selector.SelectSelectorMode.LIST,
-        )
-    )
 
 
 def _price_mode_selector(include_cost: bool, include_none: bool) -> selector.Selector:
@@ -131,7 +99,6 @@ def _template_selector() -> selector.Selector:
 
 
 def _opt(key: str, defaults: dict[str, Any]) -> vol.Optional:
-    """Optionales Feld mit ggf. vorbelegtem Default."""
     if key in defaults and defaults[key] not in (None, ""):
         return vol.Optional(key, default=defaults[key])
     return vol.Optional(key)
@@ -154,7 +121,6 @@ def _schema_setup(template: str, defaults: dict[str, Any]) -> vol.Schema:
         _opt(CONF_START_DATE, defaults): selector.DateSelector(),
     }
 
-    # Mengen-Sensoren je nach Vorlage (alle in kWh, bzw. der Mengeneinheit)
     if CONF_PRODUCTION_SENSOR in fields:
         schema[_opt(CONF_PRODUCTION_SENSOR, defaults)] = _ENERGY_SENSOR
     if CONF_CONSUMPTION_SENSOR in fields:
@@ -163,13 +129,13 @@ def _schema_setup(template: str, defaults: dict[str, Any]) -> vol.Schema:
         schema[_opt(CONF_EXPORT_SENSOR, defaults)] = _ENERGY_SENSOR
     if CONF_BATTERY_DISCHARGE_SENSOR in fields:
         schema[_opt(CONF_BATTERY_DISCHARGE_SENSOR, defaults)] = _ENERGY_SENSOR
+    if CONF_GRID_IMPORT_SENSOR in fields:
+        schema[_opt(CONF_GRID_IMPORT_SENSOR, defaults)] = _ENERGY_SENSOR
 
-    # Modus-Auswahl (die zugehörigen Wertfelder kommen erst im nächsten Schritt)
     schema[_req(CONF_PRICE_MODE, defaults, PRICE_MODE_FIXED)] = _price_mode_selector(
         include_cost=True, include_none=False
     )
 
-    # Baseline (Vergleich mit Alt-Lösung) – hat keinen Modus, daher direkt hier
     if has_baseline:
         schema[_opt(CONF_BASELINE_RATE, defaults)] = _PRICE_PER_UNIT
 
@@ -189,7 +155,6 @@ def _schema_sources(
     """Schritt 3: nur die zum gewählten Modus passenden Wertfelder."""
     schema: dict[Any, Any] = {}
 
-    # --- Bezugspreis ---
     if price_mode == PRICE_MODE_FIXED:
         schema[_opt(CONF_PRICE_FIXED, defaults)] = _PRICE_PER_UNIT
     elif price_mode == PRICE_MODE_SENSOR:
@@ -197,46 +162,23 @@ def _schema_sources(
     elif price_mode == PRICE_MODE_COST_SENSOR:
         schema[_opt(CONF_COST_SENSOR, defaults)] = _MONEY_SENSOR
 
-    # --- Vergütung ---
     if reward_mode == PRICE_MODE_FIXED:
         schema[_opt(CONF_REWARD_FIXED, defaults)] = _PRICE_PER_UNIT
     elif reward_mode == PRICE_MODE_SENSOR:
         schema[_opt(CONF_REWARD_SENSOR, defaults)] = _MONEY_SENSOR
-    # PRICE_MODE_NONE oder None -> kein Vergütungsfeld
 
     return vol.Schema(schema)
 
 
 def _needs_sources_step(price_mode: str, reward_mode: str | None) -> bool:
-    """Ob Schritt 3 überhaupt Felder hätte (sonst überspringen)."""
-    has_price = price_mode in (
-        PRICE_MODE_FIXED,
-        PRICE_MODE_SENSOR,
-        PRICE_MODE_COST_SENSOR,
-    )
+    has_price = price_mode in (PRICE_MODE_FIXED, PRICE_MODE_SENSOR, PRICE_MODE_COST_SENSOR)
     has_reward = reward_mode in (PRICE_MODE_FIXED, PRICE_MODE_SENSOR)
     return has_price or has_reward
 
 
-def _needs_legacy_step(template: str) -> bool:
-    """Ob der Legacy-Schritt für diese Vorlage angeboten werden soll."""
-    return TEMPLATE_DEFAULTS.get(template, {}).get("has_legacy", False)
-
-
-def _schema_legacy(template: str, defaults: dict[str, Any]) -> vol.Schema:
-    """Schritt 4 (optional): Vergleich mit der Alt-Lösung (EV/Heizung)."""
-    schema: dict[Any, Any] = {
-        _opt(CONF_LEGACY_CONSUMPTION, defaults): _LEGACY_CONSUMPTION,
-        _opt(CONF_LEGACY_FUEL_TYPE, defaults): _fuel_type_selector(),
-        _opt(CONF_FUEL_PRICE_FIXED, defaults): _FUEL_PRICE_SELECTOR,
-        _opt(CONF_FUEL_PRICE_SENSOR, defaults): _ANY_SENSOR,
-    }
-    return vol.Schema(schema)
-
+# ── Config Flow ───────────────────────────────────────────────────────────────
 
 class RoiTrackerConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Geführter Dialog zum Anlegen einer Anlage."""
-
     VERSION = 1
 
     def __init__(self) -> None:
@@ -246,11 +188,9 @@ class RoiTrackerConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Schritt 1: Vorlage auswählen."""
         if user_input is not None:
             self._template = user_input[CONF_TEMPLATE]
             return await self.async_step_setup()
-
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
@@ -261,9 +201,7 @@ class RoiTrackerConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_setup(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Schritt 2: Grunddaten, Sensoren und Modus-Auswahl."""
         assert self._template is not None
-
         if user_input is not None:
             self._data = {CONF_TEMPLATE: self._template, **user_input}
             if _needs_sources_step(
@@ -271,54 +209,24 @@ class RoiTrackerConfigFlow(ConfigFlow, domain=DOMAIN):
                 user_input.get(CONF_REWARD_MODE),
             ):
                 return await self.async_step_sources()
-            if _needs_legacy_step(self._template):
-                return await self.async_step_legacy()
-            return self.async_create_entry(
-                title=self._data[CONF_NAME], data=self._data
-            )
-
+            return self.async_create_entry(title=self._data[CONF_NAME], data=self._data)
         return self.async_show_form(
             step_id="setup",
             data_schema=_schema_setup(self._template, {}),
-            description_placeholders={"template": self._template},
         )
 
     async def async_step_sources(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Schritt 3: passende Preis-/Vergütungs-Felder."""
         assert self._template is not None
         price_mode = self._data.get(CONF_PRICE_MODE, PRICE_MODE_FIXED)
         reward_mode = self._data.get(CONF_REWARD_MODE)
-
         if user_input is not None:
             self._data.update(user_input)
-            if _needs_legacy_step(self._template):
-                return await self.async_step_legacy()
-            return self.async_create_entry(
-                title=self._data[CONF_NAME], data=self._data
-            )
-
+            return self.async_create_entry(title=self._data[CONF_NAME], data=self._data)
         return self.async_show_form(
             step_id="sources",
             data_schema=_schema_sources(price_mode, reward_mode, {}),
-        )
-
-    async def async_step_legacy(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Schritt 4 (EV/Heizung): Vergleich mit der Alt-Lösung."""
-        assert self._template is not None
-
-        if user_input is not None:
-            self._data.update(user_input)
-            return self.async_create_entry(
-                title=self._data[CONF_NAME], data=self._data
-            )
-
-        return self.async_show_form(
-            step_id="legacy",
-            data_schema=_schema_legacy(self._template, {}),
         )
 
     @staticmethod
@@ -327,9 +235,9 @@ class RoiTrackerConfigFlow(ConfigFlow, domain=DOMAIN):
         return RoiTrackerOptionsFlow()
 
 
-class RoiTrackerOptionsFlow(OptionsFlow):
-    """Nachträgliches Bearbeiten einer Anlage (Sensoren/Preise ändern)."""
+# ── Options Flow ──────────────────────────────────────────────────────────────
 
+class RoiTrackerOptionsFlow(OptionsFlow):
     def __init__(self) -> None:
         self._data: dict[str, Any] = {}
 
@@ -344,7 +252,6 @@ class RoiTrackerOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Schritt 1 (Optionen): Grunddaten und Modus-Auswahl."""
         if user_input is not None:
             self._data = dict(user_input)
             if _needs_sources_step(
@@ -352,10 +259,7 @@ class RoiTrackerOptionsFlow(OptionsFlow):
                 user_input.get(CONF_REWARD_MODE),
             ):
                 return await self.async_step_sources()
-            if _needs_legacy_step(self._template):
-                return await self.async_step_legacy()
             return self.async_create_entry(title="", data=self._data)
-
         return self.async_show_form(
             step_id="init",
             data_schema=_schema_setup(self._template, self._current),
@@ -364,30 +268,12 @@ class RoiTrackerOptionsFlow(OptionsFlow):
     async def async_step_sources(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Schritt 2 (Optionen): passende Preis-/Vergütungs-Felder."""
         price_mode = self._data.get(CONF_PRICE_MODE, PRICE_MODE_FIXED)
         reward_mode = self._data.get(CONF_REWARD_MODE)
-
         if user_input is not None:
             self._data.update(user_input)
-            if _needs_legacy_step(self._template):
-                return await self.async_step_legacy()
             return self.async_create_entry(title="", data=self._data)
-
         return self.async_show_form(
             step_id="sources",
             data_schema=_schema_sources(price_mode, reward_mode, self._current),
-        )
-
-    async def async_step_legacy(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Schritt 3 (Optionen): Vergleich mit der Alt-Lösung."""
-        if user_input is not None:
-            self._data.update(user_input)
-            return self.async_create_entry(title="", data=self._data)
-
-        return self.async_show_form(
-            step_id="legacy",
-            data_schema=_schema_legacy(self._template, self._current),
         )

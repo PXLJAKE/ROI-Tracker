@@ -22,6 +22,7 @@ class RoiState:
     # Zuletzt gesehene "fertige" €-Zählerstände
     last_cost_total: float | None = None
     last_reward_total: float | None = None
+    last_grid_import: float | None = None
 
     # Kumulierte Geldbeträge
     savings: float = 0.0  # gespart durch Eigenverbrauch (€)
@@ -32,6 +33,8 @@ class RoiState:
     total_consumption: float = 0.0
     total_export: float = 0.0
     total_battery_discharge: float = 0.0
+    grid_import_kwh: float = 0.0   # aus dem Netz bezogene Energie (kWh)
+    grid_import_cost: float = 0.0  # dafür bezahlter Betrag (€)
 
     first_update: str | None = None  # ISO-Zeitstempel der ersten Messung
 
@@ -62,6 +65,8 @@ class RoiResult:
     daily_average: float = 0.0
     monthly_estimate: float = 0.0
     yearly_estimate: float = 0.0
+    grid_import_kwh: float = 0.0
+    grid_import_cost: float = 0.0
     attributes: dict = field(default_factory=dict)
 
 
@@ -88,6 +93,7 @@ def update(
     consumption: float | None = None,
     export: float | None = None,
     battery_discharge: float | None = None,
+    grid_import: float | None = None,
     price_per_unit: float | None = None,
     reward_per_unit: float | None = None,
     cost_total: float | None = None,
@@ -141,6 +147,17 @@ def update(
             state.revenue += d_units * reward_per_unit
         state.last_export = export
 
+    # --- Netzbezug (optional, nur für Gesamtbilanz-Anzeige) -----------------
+    # Der Netzbezug wird NICHT vom total_return abgezogen, weil er den ROI der
+    # PV-Anlage nicht mindert (man würde ihn ohne PV genauso zahlen).
+    # Die Werte dienen der transparenten Darstellung im Dashboard.
+    if grid_import is not None:
+        d_grid = _delta(grid_import, state.last_grid_import)
+        state.grid_import_kwh += d_grid
+        if price_per_unit is not None:
+            state.grid_import_cost += d_grid * price_per_unit
+        state.last_grid_import = grid_import
+
     # --- Ersparnis durch Batterie-Entladung ---------------------------------
     # Jede kWh aus der Batterie ersetzt Netzbezug -> Ersparnis zum Bezugspreis.
     # Bei fertigem Kosten-Sensor (cost_total) ist die Batterie i. d. R. bereits
@@ -190,6 +207,9 @@ def update(
     if denom > 0:
         self_sufficiency = self_used / denom * 100.0
 
+    grid_import_kwh = round(state.grid_import_kwh, 3)
+    grid_import_cost = round(state.grid_import_cost, 2)
+
     return RoiResult(
         savings=round(state.savings, 2),
         revenue=round(state.revenue, 2),
@@ -205,6 +225,8 @@ def update(
         daily_average=round(daily_avg, 2),
         monthly_estimate=monthly_estimate,
         yearly_estimate=yearly_estimate,
+        grid_import_kwh=grid_import_kwh,
+        grid_import_cost=grid_import_cost,
         attributes={
             "investment": investment,
             "daily_average": round(daily_avg, 2),
@@ -214,6 +236,8 @@ def update(
             "total_consumption": round(state.total_consumption, 3),
             "total_export": round(state.total_export, 3),
             "total_battery_discharge": round(state.total_battery_discharge, 3),
+            "grid_import_kwh": grid_import_kwh,
+            "grid_import_cost": grid_import_cost,
             "first_update": state.first_update,
         },
     )

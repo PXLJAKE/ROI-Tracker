@@ -15,20 +15,22 @@
           "name": "Asset name",
           "investment": "Investment cost",
           "start_date": "Start date (optional, can be in the past)",
-          "production_sensor": "Generated energy (kWh, cumulative)",
-          "consumption_sensor": "Self-consumption (kWh, cumulative)",
+          "production_sensor": "PV production (kWh, cumulative)",
+          "consumption_sensor": "Self-consumption from PV/battery (kWh, cumulative)",
           "export_sensor": "Exported to grid (kWh, cumulative)",
           "battery_discharge_sensor": "Discharged from battery (kWh, cumulative)",
+          "grid_import_sensor": "Grid import (kWh, cumulative) – optional",
           "price_mode": "Where does your electricity price (import) come from?",
           "reward_mode": "Where does your feed-in tariff come from?"
         },
         "data_description": {
-          "investment": "One-time investment in € that should pay off (e.g. 12000).",
-          "start_date": "Optionally a date in the past. The calculation then starts retroactively from that day using the stored sensor history. Exact with a fixed price; requires the sensors to have long-term statistics since that date.",
-          "consumption_sensor": "PV: self-used energy in kWh – NOT grid import. EV: odometer reading (cumulative km). Heating: energy consumed in kWh.",
-          "export_sensor": "Energy exported to the grid in kWh. Feed-in revenue = this × tariff.",
-          "battery_discharge_sensor": "Energy taken from the battery in kWh. Counted like self-consumption (× price) as savings.",
-          "price_mode": "Determines how the monetary value of your self-consumption is calculated. You enter the matching value/sensor in the next step."
+          "investment": "One-time investment in € that should pay off (e.g. 20000).",
+          "start_date": "Optionally a date in the past. The calculation starts retroactively from that day using stored sensor history.",
+          "consumption_sensor": "Self-consumption in kWh – the electricity you use directly from PV or battery. NOT grid import. Savings = this × electricity price.",
+          "export_sensor": "Energy exported to the grid in kWh. Revenue = this × feed-in tariff.",
+          "battery_discharge_sensor": "Energy discharged from battery in kWh. Counted as savings (× electricity price).",
+          "grid_import_sensor": "Optional: cumulative grid import in kWh (e.g. from Tibber or smart meter). NOT subtracted from ROI – shown transparently so you can see how much you still buy from the grid.",
+          "price_mode": "Determines how the monetary value of your self-consumption is calculated."
         }
       },
       "sources": {
@@ -42,27 +44,11 @@
           "reward_sensor": "Sensor: feed-in revenue in € (cumulative)"
         },
         "data_description": {
-          "price_fixed": "Your energy price per kWh, e.g. 0.30. Multiplied by self-consumption.",
+          "price_fixed": "Your energy price per kWh, e.g. 0.30.",
           "price_sensor": "A sensor providing the current energy price in €/kWh (e.g. Tibber). Each self-used kWh is valued at the price at that moment.",
-          "cost_sensor": "Only choose this if you already have a sensor accumulating the saved amount in €. NOT your electricity bill / \"accumulated cost\" – that would be expenses, not savings.",
-          "reward_fixed": "Your feed-in tariff per kWh, e.g. 0.08.",
+          "cost_sensor": "Only choose this if you have a sensor accumulating the saved amount in €. NOT your electricity bill – that would be expenses, not savings.",
+          "reward_fixed": "Your feed-in tariff per kWh, e.g. 0.082.",
           "reward_sensor": "A sensor accumulating the feed-in revenue received in €."
-        }
-      },
-      "legacy": {
-        "title": "Old solution comparison",
-        "description": "Enter the consumption of your **old solution** (combustion car / old heating). ROI Tracker uses this to show how much money you save compared to the old way.\n\nAll fields are optional. Leave empty to disable the comparison.",
-        "data": {
-          "legacy_consumption": "Old solution consumption (per 100 units)",
-          "legacy_fuel_type": "Fuel / energy carrier type",
-          "fuel_price_fixed": "Fuel price, fixed value (€/unit)",
-          "fuel_price_sensor": "Fuel price sensor (€/unit)"
-        },
-        "data_description": {
-          "legacy_consumption": "For EV: fuel consumption of old car in L/100 km (e.g. 8.5). For heating: consumption per 100 m² per year or per 100 kWh, depending on the fuel. Multiplied by the fuel price → gives €/100 units.",
-          "legacy_fuel_type": "Select the fuel or energy carrier of the old solution. Informational only – does not affect calculation.",
-          "fuel_price_fixed": "Price per litre, m³ or kWh of the old fuel, e.g. 1.85 €/L for diesel.",
-          "fuel_price_sensor": "Optional: HA sensor providing the current fuel price. Takes priority over the fixed value."
         }
       }
     },
@@ -74,28 +60,27 @@
     "step": {
       "init": {
         "title": "Edit asset",
-        "description": "Adjust investment, sensors and price sources. Amount sensors are cumulative kWh meter readings. Changes apply immediately.",
+        "description": "Adjust investment, sensors and price sources.",
         "data": {
           "name": "Asset name",
           "investment": "Investment cost",
           "start_date": "Start date (optional, can be in the past)",
-          "production_sensor": "Generated energy (kWh, cumulative)",
-          "consumption_sensor": "Self-consumption (kWh, cumulative)",
+          "production_sensor": "PV production (kWh, cumulative)",
+          "consumption_sensor": "Self-consumption from PV/battery (kWh, cumulative)",
           "export_sensor": "Exported to grid (kWh, cumulative)",
           "battery_discharge_sensor": "Discharged from battery (kWh, cumulative)",
+          "grid_import_sensor": "Grid import (kWh, cumulative) – optional",
           "price_mode": "Where does your electricity price (import) come from?",
           "reward_mode": "Where does your feed-in tariff come from?"
         },
         "data_description": {
-          "investment": "One-time investment in € that should pay off.",
-          "consumption_sensor": "The self-used solar energy in kWh – NOT the grid import.",
-          "export_sensor": "Energy exported to the grid in kWh.",
-          "battery_discharge_sensor": "Energy taken from the battery in kWh."
+          "consumption_sensor": "Self-consumption from PV/battery – NOT grid import.",
+          "grid_import_sensor": "Optional: cumulative grid import (display only, not deducted from ROI)."
         }
       },
       "sources": {
         "title": "Prices & feed-in",
-        "description": "Enter the values matching your selection. Prices always in € per kWh.",
+        "description": "Enter the values matching your selection.",
         "data": {
           "price_fixed": "Fixed electricity price (€/kWh)",
           "price_sensor": "Electricity price sensor (€/kWh, e.g. Tibber)",
@@ -107,30 +92,13 @@
           "price_sensor": "Sensor with the current energy price in €/kWh (e.g. Tibber).",
           "cost_sensor": "Only a sensor accumulating the saved amount in € – not the electricity bill."
         }
-      },
-      "legacy": {
-        "title": "Old solution comparison",
-        "description": "Adjust the old solution data. Leaving fields empty disables the comparison.",
-        "data": {
-          "legacy_consumption": "Old solution consumption (per 100 units)",
-          "legacy_fuel_type": "Fuel / energy carrier type",
-          "fuel_price_fixed": "Fuel price, fixed value (€/unit)",
-          "fuel_price_sensor": "Fuel price sensor (€/unit)"
-        },
-        "data_description": {
-          "legacy_consumption": "For EV: L/100 km of the old car. For heating: consumption per 100 units.",
-          "fuel_price_fixed": "Price per litre, m³ or kWh of the old fuel.",
-          "fuel_price_sensor": "Sensor with current fuel price. Takes priority over the fixed value."
-        }
       }
     }
   },
   "selector": {
     "template": {
       "options": {
-        "pv": "PV system",
-        "ev": "Electric vehicle",
-        "heating": "Heating / heat pump",
+        "pv": "PV system (with battery)",
         "custom": "Custom"
       }
     },
@@ -141,25 +109,13 @@
         "cost_sensor": "Ready-made € value sensor",
         "none": "None"
       }
-    },
-    "fuel_type": {
-      "options": {
-        "diesel": "Diesel",
-        "benzin": "Petrol (regular / E10)",
-        "lpg": "LPG (autogas)",
-        "cng": "CNG (compressed natural gas)",
-        "erdgas": "Natural gas (heating)",
-        "oel": "Heating oil",
-        "pellets": "Wood pellets",
-        "fernwaerme": "District heating"
-      }
     }
   },
   "entity": {
     "sensor": {
       "total_return": { "name": "Total return" },
-      "savings": { "name": "Savings" },
-      "battery_savings": { "name": "Battery savings" },
+      "savings": { "name": "Savings (self-consumption)" },
+      "battery_savings": { "name": "Savings (battery)" },
       "revenue": { "name": "Feed-in revenue" },
       "remaining_investment": { "name": "Remaining investment" },
       "amortization": { "name": "Amortization" },
@@ -167,7 +123,8 @@
       "breakeven_days": { "name": "Days to break-even" },
       "self_sufficiency": { "name": "Self-consumption rate" },
       "daily_average": { "name": "Daily avg. return" },
-      "monthly_estimate": { "name": "Monthly estimate" }
+      "monthly_estimate": { "name": "Monthly estimate" },
+      "grid_import_cost": { "name": "Grid import (cost)" }
     }
   },
   "services": {
@@ -181,7 +138,7 @@
       "fields": {
         "start_date": {
           "name": "Start date",
-          "description": "Date to calculate from retroactively (optional; otherwise the start date configured on the asset)."
+          "description": "Date to calculate from (optional; otherwise the start date configured on the asset)."
         }
       }
     }

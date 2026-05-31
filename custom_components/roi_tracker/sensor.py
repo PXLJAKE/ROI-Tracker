@@ -25,6 +25,7 @@ from .const import (
     SENSOR_BATTERY_SAVINGS,
     SENSOR_BREAKEVEN_DAYS,
     SENSOR_DAILY_AVERAGE,
+    SENSOR_GRID_IMPORT_COST,
     SENSOR_MONTHLY_ESTIMATE,
     SENSOR_REMAINING,
     SENSOR_REVENUE,
@@ -138,6 +139,15 @@ SENSOR_DESCRIPTIONS: tuple[RoiSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:calendar-month",
         value_fn=lambda r: r.monthly_estimate if r.monthly_estimate else None,
+    ),
+    RoiSensorDescription(
+        key=SENSOR_GRID_IMPORT_COST,
+        translation_key=SENSOR_GRID_IMPORT_COST,
+        native_unit_of_measurement=CURRENCY,
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        icon="mdi:transmission-tower-import",
+        value_fn=lambda r: r.grid_import_cost if r.grid_import_cost else None,
     ),
 )
 
