@@ -20,14 +20,17 @@ from .const import (
     CONF_CONSUMPTION_SENSOR,
     CONF_COST_SENSOR,
     CONF_EXPORT_SENSOR,
+    CONF_GRID_IMPORT_SENSOR,
     CONF_INVESTMENT,
     CONF_PRICE_FIXED,
     CONF_PRICE_MODE,
     CONF_PRICE_SENSOR,
+    CONF_PRODUCTION_SENSOR,
     CONF_REWARD_FIXED,
     CONF_REWARD_MODE,
     CONF_REWARD_SENSOR,
     CONF_START_DATE,
+    CONF_TEMPLATE,
     DEFAULT_UPDATE_INTERVAL_MINUTES,
     DOMAIN,
     PRICE_MODE_COST_SENSOR,
@@ -55,38 +58,28 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
             hass, STORAGE_VERSION, STORAGE_KEY.format(entry_id=entry.entry_id)
         )
         self._state: RoiState = RoiState()
-        # Wird vom recalculate-Service gesetzt, um das Config-Startdatum zu übersteuern.
         self._override_start_date: str | None = None
 
     @property
     def config(self) -> dict:
-        """Effektive Konfiguration (Options haben Vorrang vor Daten)."""
         return {**self.entry.data, **self.entry.options}
 
     async def async_load_state(self) -> None:
-        """Persistenten Zustand beim Setup laden.
-
-        Existiert noch kein gespeicherter Zustand und ist ein Startdatum gesetzt,
-        wird die Basislinie rückwirkend aus der Sensor-Historie gesetzt.
-        """
         stored = await self._store.async_load()
         if stored:
             self._state = RoiState.from_dict(stored)
             return
-
         self._state = RoiState()
         await self.async_seed_from_history()
         await self._async_save_state()
 
     def _parse_start_date(self):
-        """Parst das Startdatum (Override oder Konfiguration) zu einem datetime."""
         raw = self._override_start_date or self.config.get(CONF_START_DATE)
         if not raw:
             return None
         try:
             dt = dt_util.parse_datetime(raw)
             if dt is None:
-                # Reines Datum (YYYY-MM-DD) -> auf Tagesbeginn setzen.
                 date = dt_util.parse_date(raw)
                 if date is None:
                     return None
@@ -99,11 +92,6 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
             return None
 
     async def async_seed_from_history(self) -> bool:
-        """Setzt die Basislinie auf die Zählerstände zum Startdatum.
-
-        Dadurch erscheint beim ersten Lauf die seit dem Startdatum aufgelaufene
-        Ersparnis. Gibt True zurück, wenn mindestens ein Wert gesetzt wurde.
-        """
         start = self._parse_start_date()
         if start is None:
             return False
@@ -121,9 +109,7 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
                 seeded = True
                 _LOGGER.debug(
                     "Basislinie %s = %s (Stand %s) aus Historie gesetzt",
-                    entity_id,
-                    value,
-                    start.date(),
+                    entity_id, value, start.date(),
                 )
 
         await _seed(CONF_CONSUMPTION_SENSOR, "last_consumption")
@@ -131,21 +117,16 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
         await _seed(CONF_BATTERY_DISCHARGE_SENSOR, "last_battery_discharge")
         await _seed(CONF_COST_SENSOR, "last_cost_total")
         await _seed(CONF_REWARD_SENSOR, "last_reward_total")
+        await _seed(CONF_GRID_IMPORT_SENSOR, "last_grid_import")
 
         if not seeded:
             _LOGGER.info(
-                "Startdatum gesetzt, aber keine Historie für die Sensoren gefunden "
-                "(zu kurze Aufbewahrung oder Sensoren ohne state_class?). Die "
-                "Berechnung startet ab jetzt."
+                "Startdatum gesetzt, aber keine Historie für die Sensoren gefunden. "
+                "Die Berechnung startet ab jetzt."
             )
         return seeded
 
     async def async_recalculate_from(self, start_date: str | None = None) -> None:
-        """Setzt den Rechner zurück und startet rückwirkend ab einem Datum neu.
-
-        Wird vom recalculate-Service genutzt. Ohne ``start_date`` wird das in der
-        Konfiguration hinterlegte Startdatum verwendet.
-        """
         self._state = RoiState()
         await self._store.async_remove()
         if start_date:
@@ -158,7 +139,6 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
         await self._store.async_save(self._state.to_dict())
 
     def _read_number(self, entity_id: str | None) -> float | None:
-        """Liest einen numerischen Sensorwert; None bei fehlend/unverfügbar."""
         if not entity_id:
             return None
         state = self.hass.states.get(entity_id)
@@ -177,10 +157,14 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
         consumption = self._read_number(cfg.get(CONF_CONSUMPTION_SENSOR))
         export = self._read_number(cfg.get(CONF_EXPORT_SENSOR))
         battery_discharge = self._read_number(cfg.get(CONF_BATTERY_DISCHARGE_SENSOR))
-        baseline_rate = cfg.get(CONF_BASELINE_RATE)
-        baseline_rate = float(baseline_rate) if baseline_rate not in (None, "") else None
+        production = self._read_number(cfg.get(CONF_PRODUCTION_SENSOR))
+        grid_import = self._read_number(cfg.get(CONF_GRID_IMPORT_SENSOR))
 
-        # Bezugspreis je nach Modus
+        # Baseline (nur TEMPLATE_CUSTOM, manuell eingetragen)
+        raw_base = cfg.get(CONF_BASELINE_RATE)
+        baseline_rate = float(raw_base) if raw_base not in (None, "") else None
+
+        # Bezugspreis
         price_mode = cfg.get(CONF_PRICE_MODE, PRICE_MODE_FIXED)
         price_per_unit: float | None = None
         cost_total: float | None = None
@@ -192,7 +176,7 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
         elif price_mode == PRICE_MODE_COST_SENSOR:
             cost_total = self._read_number(cfg.get(CONF_COST_SENSOR))
 
-        # Vergütung je nach Modus
+        # Vergütung
         reward_mode = cfg.get(CONF_REWARD_MODE, PRICE_MODE_FIXED)
         reward_per_unit: float | None = None
         reward_total: float | None = None
@@ -209,6 +193,7 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
             consumption=consumption,
             export=export,
             battery_discharge=battery_discharge,
+            grid_import=grid_import,
             price_per_unit=price_per_unit,
             reward_per_unit=reward_per_unit,
             cost_total=cost_total,
@@ -216,11 +201,14 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
             baseline_rate=baseline_rate,
         )
 
+        result.attributes["template"] = cfg.get(CONF_TEMPLATE, "custom")
+        if production is not None:
+            result.attributes["total_production"] = round(production, 3)
+
         await self._async_save_state()
         return result
 
     async def async_reset(self) -> None:
-        """Setzt den Rechner auf null zurück (z. B. via Service/Button später)."""
         self._state = RoiState()
         await self._store.async_remove()
         await self.async_request_refresh()

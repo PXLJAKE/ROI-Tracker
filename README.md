@@ -3,12 +3,25 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![Validate](https://github.com/pxljake/roi-tracker/actions/workflows/validate.yml/badge.svg)](https://github.com/pxljake/roi-tracker/actions/workflows/validate.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.2.0--beta.1-orange.svg)](https://github.com/pxljake/roi-tracker/releases)
 
-**Universeller Return-on-Investment-Rechner für Home Assistant.** Verfolge, wann
-sich eine Investition amortisiert – ob **PV-Anlage**, **Elektroauto**,
-**Wärmepumpe/Heizung** oder etwas **Benutzerdefiniertes**. Du wählst beim Anlegen
-einfach deine vorhandenen Sensoren aus, und ROI Tracker rechnet laufend
-Ersparnis, Amortisation und Restlaufzeit – inklusive einer schönen Dashboard-Karte.
+> **⚠️ Beta-Software – Hinweis / Beta Notice**
+>
+> ROI Tracker befindet sich in aktiver Entwicklung. Alle angezeigten Werte sind
+> **berechnete Schätzungen** auf Basis der angegebenen Sensoren und Preise.
+> Sie ersetzen keine Steuerberatung, Energieabrechnung oder Herstellergarantien.
+> Werte können durch fehlerhafte Sensor-Konfiguration, Messfehler oder
+> dynamische Preisschwankungen abweichen. Nutzung auf eigene Verantwortung.
+>
+> *All displayed values are calculated estimates based on the configured sensors
+> and prices. They do not replace professional energy accounting or official billing.
+> Use at your own risk.*
+
+---
+
+**Verfolge, wann sich deine PV-Anlage amortisiert hat** – mit dynamischen
+Tibber-Preisen, Batterie-Ersparnis und Einspeisevergütung.
+Inklusive übersichtlicher Dashboard-Karte mit Donut-Chart und Monatshistogramm.
 
 > 🇬🇧 *English description below.*
 
@@ -16,169 +29,176 @@ Ersparnis, Amortisation und Restlaufzeit – inklusive einer schönen Dashboard-
 
 ## ✨ Funktionen
 
-- **Mehrere Anlagen**: Lege beliebig viele unabhängige ROI-Rechner an (z. B. „PV Haus", „E-Auto", „Wärmepumpe").
-- **Vorlagen**: PV-Anlage · Elektroauto · Heizung/Wärmepumpe · Benutzerdefiniert – jede zeigt nur die passenden Felder.
-- **Flexible Preisquellen** – nimm, was du hast:
-  - **Fester Wert** (€/kWh)
-  - **Dynamischer Sensor** (z. B. Tibber aktueller Preis €/kWh)
-  - **Fertiger Kosten-Sensor** in € (z. B. Tibbers „accumulated cost")
-- **Einspeisevergütung**: fester Tarif oder Ertrags-Sensor (€).
-- **Vergleich mit Alt-Lösung** (Baseline) für E-Auto/Heizung – z. B. was der Verbrenner gekostet hätte.
-- **Echte Sensoren** für Automationen, Verlauf und andere Karten.
-- **Persistenter Zustand**: übersteht Neustarts, robust gegen Zähler-Resets der Quell-Sensoren.
-- **Eigene Lovelace-Karte** mit grafischem Editor und Amortisations-Balken.
-- **Zweisprachig**: Deutsch (Hauptsprache) & Englisch.
+- **PV-Amortisationsrechner** – wie viel hast du seit Inbetriebnahme verdient und gespart?
+- **Tibber-Unterstützung** – dynamischer Strompreis als Sensor; jede selbst verbrauchte kWh wird zum aktuellen Preis bewertet
+- **Batterie** – Entlade-kWh zählen als Ersparnis zum aktuellen Bezugspreis
+- **Einspeisevergütung** – fester Tarif oder Sensor
+- **Netzbezugs-Sensor (optional)** – transparente Anzeige, wie viel du noch vom Netz kaufst (kWh + Kosten) ohne den ROI zu verfälschen
+- **Rückwirkend rechnen** – Startdatum setzen und aus gespeicherter Sensor-Historie laden
+- **12 HA-Sensoren** pro Anlage für Automationen, Verlauf und andere Karten
+- **Lovelace-Karte** mit Donut-Chart, Monatsbalken-Histogramm (letzten 12 Monate), Aufschlüsselung und Prognosen
 
-## 📊 Erzeugte Sensoren (pro Anlage)
+## 🧮 Wie wird gerechnet?
+
+```
+Gesamtrückfluss = Eigenverbrauch-Ersparnis + Batterie-Ersparnis + Einspeiseertrag
+
+Eigenverbrauch-Ersparnis = verbrauchte_kWh × Tibber-Preis (was du sonst gekauft hättest)
+Batterie-Ersparnis       = entladene_kWh  × Tibber-Preis
+Einspeiseertrag          = eingespeiste_kWh × Vergütung
+Break-Even               = wenn Gesamtrückfluss ≥ Investition
+```
+
+**Netzbezug wird absichtlich nicht abgezogen.** Der ROI der PV-Anlage misst,
+wie viel Geld sie *zurückbringt* (durch vermiedene Kosten + Erlöse). Was du
+weiterhin aus dem Netz kaufst, würdest du auch ohne PV zahlen – der Vergleich
+wäre sonst verzerrt. Der Netzbezug wird als transparente Zusatz-Information angezeigt.
+
+## 📊 Erzeugte Sensoren pro Anlage (12 Stück)
 
 | Sensor | Einheit | Beschreibung |
 |---|---|---|
-| Gesamtrückfluss | € | Ersparnis + Batterie-Ersparnis + Einspeiseertrag, kumuliert |
-| Ersparnis | € | gesparter Netzbezug durch Eigenverbrauch |
-| Ersparnis durch Batterie | € | gesparter Netzbezug durch Batterie-Entladung |
-| Einspeiseertrag | € | Einnahmen aus Einspeisung/Abgabe |
-| Offener Restbetrag | € | noch nicht amortisierter Teil der Investition |
-| Amortisation | % | wie viel der Investition zurückgeflossen ist |
+| Gesamtrückfluss | € | Ersparnis + Batterie + Einspeisung (kumuliert) |
+| Ersparnis (Eigenverbrauch) | € | gesparter Netzbezug durch direkten PV-Verbrauch |
+| Ersparnis (Batterie) | € | gesparter Netzbezug durch Batterie-Entladung |
+| Einspeiseertrag | € | Einnahmen aus Einspeisung ins Netz |
+| Offener Restbetrag | € | noch nicht amortisierter Betrag |
+| Amortisation | % | zurückgeflossener Anteil der Investition |
 | ROI | % | Gewinn über die Investition hinaus |
 | Restlaufzeit bis Break-Even | d | geschätzte Tage bis zur vollen Amortisation |
-| Autarkiegrad | % | Eigenverbrauch / (Eigenverbrauch + Einspeisung) |
+| Eigenverbrauchsquote | % | wie viel % der PV-Energie selbst genutzt wird |
+| Tages-Ø Rückfluss | € | Ø täglicher Rückfluss (Basis für Prognosen) |
+| Monatliche Prognose | € | hochgerechneter monatlicher Rückfluss |
+| Netzbezug (Kosten) | € | kumulierte Kosten für Netzbezug (nur wenn Sensor konfiguriert) |
 
 ## 📦 Installation über HACS
 
-1. HACS öffnen → **Drei-Punkte-Menü** → **Benutzerdefinierte Repositories**.
-2. URL `https://github.com/pxljake/roi-tracker` hinzufügen, Kategorie **Integration**.
-3. **ROI Tracker** installieren und Home Assistant neu starten.
-4. **Einstellungen → Geräte & Dienste → Integration hinzufügen → ROI Tracker**.
+1. HACS öffnen → **Drei-Punkte-Menü** → **Benutzerdefinierte Repositories**
+2. URL `https://github.com/pxljake/roi-tracker`, Kategorie **Integration**
+3. **ROI Tracker** installieren und Home Assistant neu starten
+4. **Einstellungen → Geräte & Dienste → Integration hinzufügen → ROI Tracker**
 
-> Die Dashboard-Karte wird beim Setup automatisch als Frontend-Ressource registriert.
-> Falls nicht, füge `/hacsfiles/roi-tracker/roi-tracker-card.js` manuell als
-> Lovelace-Ressource (Typ *JavaScript-Modul*) hinzu.
+> **Karte nicht sichtbar?** Nach dem ersten Setup das HA-Frontend im Browser
+> mit **Strg+F5** (Hard Reload) neu laden. Die Karte wird beim Setup automatisch
+> registriert. Falls das nicht klappt: `ROI Tracker Card` unter
+> **Einstellungen → Dashboards → Ressourcen** manuell als JavaScript-Modul eintragen:
+> `/roi_tracker/roi-tracker-card.js`
 
 ### Manuelle Installation
-Kopiere `custom_components/roi_tracker` in deinen `config/custom_components`-Ordner und starte HA neu.
+Kopiere `custom_components/roi_tracker` in deinen `config/custom_components`-Ordner
+und starte HA neu.
 
-## ⚙️ Einrichtung einer Anlage
+## ⚙️ Einrichtung (Tibber + PV mit Speicher)
 
-1. **Vorlage wählen** (PV / E-Auto / Heizung / Benutzerdefiniert).
-2. **Investition** eintragen (Anschaffungskosten in €).
-3. **Sensoren auswählen** – nur die, die du hast:
-   - *Erzeugte/erbrachte Menge* (z. B. PV-Ertrag in kWh)
-   - *Eigenverbrauch* (kWh)
-   - *Einspeisung/Abgabe* (kWh)
-   - *Batterie* laden/entladen (optional, PV)
-4. **Preis-Quelle** für den Bezug wählen (fest / Sensor / Kosten-Sensor in €).
-5. Bei PV: **Einspeisevergütung** wählen (fest oder Ertrags-Sensor).
+1. **Vorlage:** PV-Anlage (mit Speicher)
+2. **Investition:** z. B. `20000` €
+3. **Startdatum:** Inbetriebnahme-Datum (optional, rückwirkend aus HA-Historie)
+4. **Sensoren auswählen:**
+   | Feld | Was eintragen |
+   |---|---|
+   | Eigenverbrauch aus PV/Batterie | kumulierter Eigenverbrauch-kWh-Sensor |
+   | Einspeisung ins Netz | kumulierter Einspeisung-kWh-Sensor |
+   | Aus Batterie entnommen | kumulierter Batterie-Entlade-kWh-Sensor |
+   | Netzbezug (optional) | Tibber `energy`-Sensor oder Smartmeter |
+5. **Strompreis:** Dynamischer Preis-Sensor → `sensor.tibber_xyz_current_price`
+6. **Einspeisevergütung:** Fester Wert → z. B. `0.082` (8,2 ct/kWh)
 
-Alles lässt sich später jederzeit über **Konfigurieren** an der Integration ändern.
+> **Wichtig für Tibber:** Wähle als Strompreis immer `sensor.…current_price`
+> (€/kWh), nicht `accumulated_cost`. Letzteres ist ein kumulierter Kostensensor,
+> kein Preis-Sensor.
 
 ## 🃏 Dashboard-Karte
-
-Karte hinzufügen → **ROI Tracker Card** suchen → im Editor die **Anlage** auswählen. Oder per YAML:
 
 ```yaml
 type: custom:roi-tracker-card
 device: <Geräte-ID der Anlage>
 title: Meine PV-Anlage
-# language: de   # optional, sonst HA-Sprache
+# show_chart: true         # Monatsbalken ein (Standard)
+# show_breakdown: true     # Aufschlüsselung ein (Standard)
+# language: de             # optional, sonst HA-Sprache
 ```
 
-Alternativ einzelne Entitäten direkt angeben:
+Die Karte zeigt:
+- **Donut-Chart**: Amortisationsgrad in %
+- **Metriken-Kacheln**: tägl. Ø, monatl. Prognose, Break-Even-Datum, ROI, Eigenverbrauchsquote
+- **Aufschlüsselung**: Stacked-Bar (Eigenverbrauch / Einspeisung / Batterie)
+- **Monatshistogramm**: letzten 12 Monate aus HA-Statistics (lädt automatisch)
 
-```yaml
-type: custom:roi-tracker-card
-title: E-Auto
-entities:
-  total_return: sensor.roi_e_auto_gesamtrueckfluss
-  amortization: sensor.roi_e_auto_amortisation
-  savings: sensor.roi_e_auto_ersparnis
-  breakeven_days: sensor.roi_e_auto_restlaufzeit_bis_break_even
-```
+## 🔋 Batterie-Logik
 
-## 🔋 Batterie
+Jede aus der Batterie entnommene kWh ersetzt Netzbezug → wird mit dem
+aktuellen Bezugspreis als Ersparnis gewertet. Bei fertigem €-Kosten-Sensor
+(`cost_sensor`-Modus) wird die Batterie **nicht** doppelt gezählt.
 
-Wählst du bei der PV-Vorlage einen **Batterie-Entlade-Sensor** (kumulierte kWh),
-zählt jede aus der Batterie entnommene kWh als zusätzliche Ersparnis zum
-Bezugspreis (sie ersetzt Netzbezug) und fließt in den **Autarkiegrad** ein. Die
-Ladung wird bewusst nicht als Ausgabe gerechnet, da sie i. d. R. aus
-PV-Überschuss stammt. Nutzt du einen fertigen €-Kosten-Sensor (z. B. Tibber),
-ist die Batterie meist bereits enthalten – dann wird sie nicht doppelt gezählt.
+## ⏳ Rückwirkend rechnen
 
-## ⏳ Rückwirkend rechnen (Startdatum)
+Setzt du ein **Startdatum**, liest ROI Tracker beim ersten Setup die
+Zählerstände zu diesem Datum aus der HA-Langzeitstatistik. Voraussetzung: Die
+Sensoren haben seit dem Datum eine `state_class` (sonst kein Langzeitverlauf).
 
-Im Setup kannst du ein optionales **Startdatum** angeben – auch in der
-Vergangenheit. ROI Tracker liest dann beim Anlegen aus den **gespeicherten
-Langzeit-Statistiken** deiner Sensoren den Zählerstand zu diesem Datum und nimmt
-ihn als Basislinie. So erscheint sofort die seit dem Startdatum aufgelaufene
-Ersparnis, statt erst „ab jetzt" zu zählen.
-
-- **Exakt** bei festem Preis oder fertigem €-Kosten-Sensor.
-- Bei einem **dynamischen Preis-Sensor** ist eine rückwirkende Rechnung nur
-  näherungsweise möglich (kein stundengenauer Verlauf in der Vergangenheit).
-- Voraussetzung: Die Quell-Sensoren existieren seit dem Datum und haben eine
-  `state_class` (sonst speichert der Recorder keine Langzeit-Statistik).
-
-Jederzeit neu anstoßen lässt sich das über den Service **`roi_tracker.recalculate`**:
-
+Jederzeit neu anstoßen:
 ```yaml
 action: roi_tracker.recalculate
 target:
-  device_id: <Geräte-ID der Anlage>
+  device_id: <Geräte-ID>
 data:
-  start_date: "2025-01-01"   # optional; sonst das konfigurierte Startdatum
+  start_date: "2025-01-01"   # optional
 ```
 
 ## 🔄 Zurücksetzen
 
-Über den Service **`roi_tracker.reset`** (Ziel: das Gerät der Anlage) setzt du
-einen Rechner auf null zurück – alle kumulierten Werte und der gespeicherte
-Zustand werden gelöscht und die Messung beginnt neu.
-
 ```yaml
 action: roi_tracker.reset
 target:
-  device_id: <Geräte-ID der Anlage>
+  device_id: <Geräte-ID>
 ```
 
-## 🧮 Wie wird gerechnet?
+## 🤝 Mitwirken / Contributing
 
-ROI Tracker arbeitet **inkrementell** auf den kumulierten Zählerständen deiner
-Sensoren. Bei jeder Aktualisierung wird das Delta (z. B. +2 kWh Eigenverbrauch)
-mit dem aktuellen Preis multipliziert und aufaddiert. Bei dynamischen Tarifen
-entsteht so automatisch ein zeitlich gewichteter Wert. Fertige €-Sensoren werden
-direkt per Delta übernommen. Sinkt ein Quell-Zähler (Tagesreset), wird kein
-negatives Delta gezählt. Der Stand wird persistent gespeichert und überlebt Neustarts.
+Pull Requests und Issues sind willkommen!
+
+Tests ausführen:
+```bash
+python3 tests/test_calculator.py
+```
 
 ---
 
 ## 🇬🇧 English
 
-**Universal return-on-investment tracker for Home Assistant.** Track when an
-investment pays off — **solar PV**, **electric vehicle**, **heat pump/heating**
-or anything **custom**. Pick your existing sensors during setup and ROI Tracker
-continuously computes savings, amortization and remaining time — including a nice
-dashboard card.
+> **⚠️ Beta software.** All displayed values are **calculated estimates** based
+> on the configured sensors and prices. They do not replace professional energy
+> accounting or official billing. Use at your own risk.
 
-- **Multiple assets**, each its own ROI calculator.
-- **Templates**: PV · EV · Heating · Custom (only relevant fields are shown).
-- **Flexible price sources**: fixed €/unit, dynamic price sensor (e.g. Tibber),
-  or a ready-made cost sensor in € ("accumulated cost").
-- **Feed-in reward**: fixed tariff or revenue sensor.
-- **Baseline comparison** for EV/heating (cost of the old solution).
-- **Real sensors** usable in automations and other cards.
-- **Persistent**, restart-safe, robust against source counter resets.
-- **Bundled Lovelace card** with a graphical editor.
-- Bilingual: German (primary) & English.
+**Track when your solar PV investment pays off** — with Tibber dynamic pricing,
+battery savings and feed-in revenue. Includes a Lovelace card with donut chart
+and monthly histogram.
 
-Install via HACS as a **custom repository** (category *Integration*), restart,
-then add **ROI Tracker** under *Settings → Devices & Services*.
-
-## 🤝 Mitwirken / Contributing
-
-Pull Requests und Issues sind willkommen! Tests der Berechnungslogik:
-
-```bash
-python3 tests/test_calculator.py
+**Calculation:**
 ```
+Total return = self-consumption savings + battery savings + feed-in revenue
+
+Self-consumption savings = consumed_kWh × current_Tibber_price
+Battery savings          = discharged_kWh × current_Tibber_price
+Feed-in revenue          = exported_kWh × feed-in tariff
+Break-even               = when total return ≥ investment
+```
+
+Grid import is intentionally **not subtracted** from ROI — you pay it with or
+without PV. It is displayed as transparent additional information only.
+
+**Setup (Tibber + PV with battery storage):**
+1. Template: *PV system (with battery)*
+2. Investment: e.g. `20000` €
+3. Start date: commissioning date (optional, retroactive from HA history)
+4. Sensors: self-consumption kWh, export kWh, battery discharge kWh, grid import kWh (optional)
+5. Price source: dynamic sensor → `sensor.tibber_xyz_current_price`
+6. Feed-in: fixed → e.g. `0.082` (8.2 ct/kWh)
+
+**Card not visible?** Hard-reload the browser (Ctrl+F5) after the first setup.
+
+Install via HACS as a custom repository (category *Integration*), restart HA,
+then add **ROI Tracker** under *Settings → Devices & Services*.
 
 ## 📄 Lizenz / License
 

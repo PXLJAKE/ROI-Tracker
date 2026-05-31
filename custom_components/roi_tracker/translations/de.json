@@ -3,37 +3,52 @@
     "step": {
       "user": {
         "title": "ROI Tracker – Anlage anlegen",
-        "description": "Wähle eine Vorlage. Sie bestimmt, welche Felder im nächsten Schritt angeboten werden.",
+        "description": "Wähle eine Vorlage. Sie bestimmt, welche Felder anschließend angeboten werden.",
         "data": {
           "template": "Vorlage"
         }
       },
-      "details": {
-        "title": "Anlage konfigurieren",
-        "description": "Lege Investition, Sensoren und Preise fest. Nicht vorhandene Sensoren können leer bleiben.",
+      "setup": {
+        "title": "Anlage einrichten",
+        "description": "Gib die Investition und deine Sensoren an. Mengen-Sensoren müssen **kumulierte Zählerstände** sein (kWh), keine Momentanleistung (kW). Felder, die du nicht hast, lässt du leer.",
         "data": {
           "name": "Name der Anlage",
-          "investment": "Anschaffungskosten (€)",
+          "investment": "Anschaffungskosten",
           "start_date": "Startdatum (optional, auch rückwirkend)",
-          "production_sensor": "Sensor: erzeugte/erbrachte Menge",
-          "consumption_sensor": "Sensor: Eigenverbrauch / genutzte Menge",
-          "export_sensor": "Sensor: eingespeiste/abgegebene Menge",
-          "battery_charge_sensor": "Sensor: Batterie geladen",
-          "battery_discharge_sensor": "Sensor: Batterie entladen",
-          "price_mode": "Bezugspreis – Quelle",
-          "price_fixed": "Bezugspreis fest (€/Einheit)",
-          "price_sensor": "Sensor: Bezugspreis (€/Einheit)",
-          "cost_sensor": "Sensor: kumulierte Kosten (€)",
-          "baseline_rate": "Vergleichskosten Alt-Lösung (€/Einheit)",
-          "reward_mode": "Vergütung – Quelle",
-          "reward_fixed": "Einspeisevergütung fest (€/Einheit)",
-          "reward_sensor": "Sensor: kumulierte Vergütung (€)"
+          "production_sensor": "PV-Produktion (kWh, kumuliert)",
+          "consumption_sensor": "Eigenverbrauch aus PV/Batterie (kWh, kumuliert)",
+          "export_sensor": "Einspeisung ins Netz (kWh, kumuliert)",
+          "battery_discharge_sensor": "Aus Batterie entnommen (kWh, kumuliert)",
+          "grid_import_sensor": "Netzbezug (kWh, kumuliert) – optional",
+          "price_mode": "Woher kommt dein Strompreis (Bezug)?",
+          "reward_mode": "Woher kommt deine Einspeisevergütung?"
         },
         "data_description": {
-          "investment": "Einmalige Investitionssumme, die sich amortisieren soll.",
-          "start_date": "Optional ein Datum in der Vergangenheit. Die Berechnung startet dann rückwirkend ab diesem Tag aus der gespeicherten Sensor-Historie. Funktioniert exakt bei festem Preis oder €-Kosten-Sensor; setzt voraus, dass die Sensoren seit dem Datum Langzeit-Statistiken haben.",
-          "baseline_rate": "Was die frühere Lösung pro Einheit gekostet hätte (z. B. Benzinkosten je kWh-Äquivalent beim E-Auto).",
-          "cost_sensor": "Bereits in € geführter Sensor wie Tibbers „accumulated cost“ – dann wird das Delta direkt als Ersparnis genutzt."
+          "investment": "Einmalige Investitionssumme in €, die sich amortisieren soll (z. B. 20000).",
+          "start_date": "Optional ein Datum in der Vergangenheit. Die Berechnung startet dann rückwirkend ab diesem Tag aus der gespeicherten Sensor-Historie.",
+          "consumption_sensor": "Der Eigenverbrauch in kWh – das ist der Strom, den du direkt aus der PV-Anlage oder der Batterie nutzt. NICHT der Netzbezug. Aus dieser Menge × Strompreis ergibt sich deine Ersparnis.",
+          "export_sensor": "Die ins Netz eingespeiste Energie in kWh. Menge × Einspeisevergütung = dein Einspeiseertrag.",
+          "battery_discharge_sensor": "Aus der Batterie entnommene Energie in kWh. Wird wie Eigenverbrauch als Ersparnis gewertet.",
+          "grid_import_sensor": "Optional: kumulierter Netzbezug in kWh (z. B. Tibber oder Smartmeter). Wird NICHT vom ROI abgezogen – dient nur der transparenten Anzeige, wie viel du noch aus dem Netz beziehst.",
+          "price_mode": "Bestimmt, wie der Geldwert deines Eigenverbrauchs berechnet wird."
+        }
+      },
+      "sources": {
+        "title": "Preise & Vergütung",
+        "description": "Trage die zu deiner Auswahl passenden Werte ein. Preise immer in **€ pro kWh** (z. B. 0,30).",
+        "data": {
+          "price_fixed": "Fester Strompreis (€/kWh)",
+          "price_sensor": "Strompreis-Sensor (€/kWh, z. B. Tibber)",
+          "cost_sensor": "Sensor: €-Wert der Ersparnis (kumuliert)",
+          "reward_fixed": "Feste Einspeisevergütung (€/kWh)",
+          "reward_sensor": "Sensor: Einspeiseertrag in € (kumuliert)"
+        },
+        "data_description": {
+          "price_fixed": "Dein Arbeitspreis pro kWh, z. B. 0,30.",
+          "price_sensor": "Sensor mit aktuellem Arbeitspreis in €/kWh (z. B. Tibber). Jede selbst genutzte kWh wird mit dem jeweils aktuellen Preis bewertet.",
+          "cost_sensor": "Nur wählen, wenn du bereits einen Sensor hast, der den ersparten Betrag in € kumuliert. NICHT deine Stromrechnung – das wären Ausgaben, keine Ersparnis.",
+          "reward_fixed": "Deine Einspeisevergütung pro kWh, z. B. 0,082.",
+          "reward_sensor": "Sensor, der den erhaltenen Einspeiseertrag in € kumuliert."
         }
       }
     },
@@ -45,24 +60,37 @@
     "step": {
       "init": {
         "title": "Anlage bearbeiten",
-        "description": "Passe Sensoren und Preise an. Änderungen werden sofort übernommen.",
+        "description": "Passe Investition, Sensoren und Preisquellen an.",
         "data": {
           "name": "Name der Anlage",
-          "investment": "Anschaffungskosten (€)",
+          "investment": "Anschaffungskosten",
           "start_date": "Startdatum (optional, auch rückwirkend)",
-          "production_sensor": "Sensor: erzeugte/erbrachte Menge",
-          "consumption_sensor": "Sensor: Eigenverbrauch / genutzte Menge",
-          "export_sensor": "Sensor: eingespeiste/abgegebene Menge",
-          "battery_charge_sensor": "Sensor: Batterie geladen",
-          "battery_discharge_sensor": "Sensor: Batterie entladen",
-          "price_mode": "Bezugspreis – Quelle",
-          "price_fixed": "Bezugspreis fest (€/Einheit)",
-          "price_sensor": "Sensor: Bezugspreis (€/Einheit)",
-          "cost_sensor": "Sensor: kumulierte Kosten (€)",
-          "baseline_rate": "Vergleichskosten Alt-Lösung (€/Einheit)",
-          "reward_mode": "Vergütung – Quelle",
-          "reward_fixed": "Einspeisevergütung fest (€/Einheit)",
-          "reward_sensor": "Sensor: kumulierte Vergütung (€)"
+          "production_sensor": "PV-Produktion (kWh, kumuliert)",
+          "consumption_sensor": "Eigenverbrauch aus PV/Batterie (kWh, kumuliert)",
+          "export_sensor": "Einspeisung ins Netz (kWh, kumuliert)",
+          "battery_discharge_sensor": "Aus Batterie entnommen (kWh, kumuliert)",
+          "grid_import_sensor": "Netzbezug (kWh, kumuliert) – optional",
+          "price_mode": "Woher kommt dein Strompreis (Bezug)?",
+          "reward_mode": "Woher kommt deine Einspeisevergütung?"
+        },
+        "data_description": {
+          "consumption_sensor": "Eigenverbrauch aus PV/Batterie – NICHT der Netzbezug.",
+          "grid_import_sensor": "Optional: kumulierter Netzbezug (nur für Anzeige, nicht ROI-wirksam)."
+        }
+      },
+      "sources": {
+        "title": "Preise & Vergütung",
+        "description": "Trage die zu deiner Auswahl passenden Werte ein.",
+        "data": {
+          "price_fixed": "Fester Strompreis (€/kWh)",
+          "price_sensor": "Strompreis-Sensor (€/kWh, z. B. Tibber)",
+          "cost_sensor": "Sensor: €-Wert der Ersparnis (kumuliert)",
+          "reward_fixed": "Feste Einspeisevergütung (€/kWh)",
+          "reward_sensor": "Sensor: Einspeiseertrag in € (kumuliert)"
+        },
+        "data_description": {
+          "price_sensor": "Sensor mit aktuellem Arbeitspreis in €/kWh (z. B. Tibber).",
+          "cost_sensor": "Nur ein Sensor, der den ersparten Betrag in € kumuliert – nicht die Stromrechnung."
         }
       }
     }
@@ -70,17 +98,15 @@
   "selector": {
     "template": {
       "options": {
-        "pv": "PV-Anlage",
-        "ev": "Elektroauto",
-        "heating": "Heizung / Wärmepumpe",
+        "pv": "PV-Anlage (mit Speicher)",
         "custom": "Benutzerdefiniert"
       }
     },
     "price_mode": {
       "options": {
-        "fixed": "Fester Wert",
-        "sensor": "Dynamischer Sensor (€/Einheit)",
-        "cost_sensor": "Fertiger Kosten-Sensor (€)",
+        "fixed": "Fester Preis (€/kWh)",
+        "sensor": "Dynamischer Preis-Sensor (€/kWh, z. B. Tibber)",
+        "cost_sensor": "Fertiger €-Wert-Sensor",
         "none": "Keine"
       }
     }
@@ -88,14 +114,17 @@
   "entity": {
     "sensor": {
       "total_return": { "name": "Gesamtrückfluss" },
-      "savings": { "name": "Ersparnis" },
-      "battery_savings": { "name": "Ersparnis durch Batterie" },
+      "savings": { "name": "Ersparnis (Eigenverbrauch)" },
+      "battery_savings": { "name": "Ersparnis (Batterie)" },
       "revenue": { "name": "Einspeiseertrag" },
       "remaining_investment": { "name": "Offener Restbetrag" },
       "amortization": { "name": "Amortisation" },
       "roi_percent": { "name": "ROI" },
       "breakeven_days": { "name": "Restlaufzeit bis Break-Even" },
-      "self_sufficiency": { "name": "Autarkiegrad" }
+      "self_sufficiency": { "name": "Eigenverbrauchsquote" },
+      "daily_average": { "name": "Tages-Ø Rückfluss" },
+      "monthly_estimate": { "name": "Monatliche Prognose" },
+      "grid_import_cost": { "name": "Netzbezug (Kosten)" }
     }
   },
   "services": {
