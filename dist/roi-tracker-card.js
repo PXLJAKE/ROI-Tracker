@@ -648,7 +648,7 @@ window.customCards.push({
 });
 
 console.info(
-  "%c ROI-TRACKER-CARD %c v0.2.6 ",
+  "%c ROI-TRACKER-CARD %c v0.2.7 ",
   "color:#fff;background:#03a9f4;font-weight:700;",
   "color:#03a9f4;background:#fff;font-weight:700;"
 );
