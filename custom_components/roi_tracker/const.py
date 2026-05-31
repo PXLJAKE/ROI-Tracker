@@ -144,8 +144,10 @@ SENSOR_TOTAL_RETURN: Final = "total_return"  # kumulierter Rückfluss (€)
 SENSOR_AMORTIZATION: Final = "amortization"  # Amortisation (%)
 SENSOR_REMAINING: Final = "remaining_investment"  # offener Restbetrag (€)
 SENSOR_BREAKEVEN_DAYS: Final = "breakeven_days"  # Restlaufzeit bis Break-Even (Tage)
-SENSOR_SELF_SUFFICIENCY: Final = "self_sufficiency"  # Autarkiegrad (%)
+SENSOR_SELF_SUFFICIENCY: Final = "self_sufficiency"  # Eigenverbrauchsquote (%)
 SENSOR_ROI_PERCENT: Final = "roi_percent"  # ROI (%) inkl. Gewinn über Investition
+SENSOR_DAILY_AVERAGE: Final = "daily_average"      # Ø täglicher Rückfluss (€/Tag)
+SENSOR_MONTHLY_ESTIMATE: Final = "monthly_estimate"  # Monatsprognose (€/Monat)
 
 # --- Sonstiges --------------------------------------------------------------
 

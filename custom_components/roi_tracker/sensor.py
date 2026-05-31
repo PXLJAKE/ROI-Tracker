@@ -24,6 +24,8 @@ from .const import (
     SENSOR_AMORTIZATION,
     SENSOR_BATTERY_SAVINGS,
     SENSOR_BREAKEVEN_DAYS,
+    SENSOR_DAILY_AVERAGE,
+    SENSOR_MONTHLY_ESTIMATE,
     SENSOR_REMAINING,
     SENSOR_REVENUE,
     SENSOR_ROI_PERCENT,
@@ -118,6 +120,24 @@ SENSOR_DESCRIPTIONS: tuple[RoiSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:home-lightning-bolt",
         value_fn=lambda r: r.self_sufficiency_percent,
+    ),
+    RoiSensorDescription(
+        key=SENSOR_DAILY_AVERAGE,
+        translation_key=SENSOR_DAILY_AVERAGE,
+        native_unit_of_measurement=CURRENCY,
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:calendar-today",
+        value_fn=lambda r: r.daily_average if r.daily_average else None,
+    ),
+    RoiSensorDescription(
+        key=SENSOR_MONTHLY_ESTIMATE,
+        translation_key=SENSOR_MONTHLY_ESTIMATE,
+        native_unit_of_measurement=CURRENCY,
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:calendar-month",
+        value_fn=lambda r: r.monthly_estimate if r.monthly_estimate else None,
     ),
 )
 

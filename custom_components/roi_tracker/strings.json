@@ -165,7 +165,9 @@
       "amortization": { "name": "Amortisation" },
       "roi_percent": { "name": "ROI" },
       "breakeven_days": { "name": "Restlaufzeit bis Break-Even" },
-      "self_sufficiency": { "name": "Autarkiegrad" }
+      "self_sufficiency": { "name": "Eigenverbrauchsquote" },
+      "daily_average": { "name": "Tages-Ø Rückfluss" },
+      "monthly_estimate": { "name": "Monatliche Prognose" }
     }
   },
   "services": {

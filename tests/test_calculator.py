@@ -186,6 +186,45 @@ def test_retroactive_baseline_seed() -> None:
     assert r.breakeven_days is not None and r.breakeven_days > 0
 
 
+def test_monthly_and_yearly_estimates() -> None:
+    st = RoiState()
+    calculator.update(st, investment=1000, now=START, consumption=0, price_per_unit=0.30)
+    # Nach 30 Tagen: 300 kWh * 0,30 = 90 € -> daily_avg = 3 €/Tag
+    r = calculator.update(
+        st,
+        investment=1000,
+        now=START + timedelta(days=30),
+        consumption=300,
+        price_per_unit=0.30,
+    )
+    assert r.daily_average == 3.0
+    assert r.monthly_estimate == round(3.0 * 30.44, 2)
+    assert r.yearly_estimate == round(3.0 * 365.0, 2)
+
+
+def test_breakeven_date_in_attributes() -> None:
+    st = RoiState()
+    calculator.update(st, investment=100, now=START, consumption=0, price_per_unit=1.0)
+    r = calculator.update(
+        st, investment=100, now=START + timedelta(days=10), consumption=50, price_per_unit=1.0
+    )
+    # 50 € nach 10 Tagen -> daily_avg = 5 €/Tag, noch 50 € offen -> 10 Tage
+    assert r.attributes["breakeven_date"] is not None
+    assert r.attributes["investment"] == 100
+    assert r.attributes["monthly_estimate"] == r.monthly_estimate
+
+
+def test_breakeven_date_set_when_paid_off() -> None:
+    st = RoiState()
+    calculator.update(st, investment=100, now=START, consumption=0, price_per_unit=1.0)
+    r = calculator.update(
+        st, investment=100, now=START + timedelta(days=10), consumption=200, price_per_unit=1.0
+    )
+    # 200 € > 100 € Investition -> bereits amortisiert
+    assert r.remaining_investment == 0.0
+    assert r.attributes["breakeven_date"] is not None
+
+
 def _run_all() -> None:
     fns = [v for k, v in globals().items() if k.startswith("test_") and callable(v)]
     for fn in fns:

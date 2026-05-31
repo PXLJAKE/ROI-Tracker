@@ -165,7 +165,9 @@
       "amortization": { "name": "Amortization" },
       "roi_percent": { "name": "ROI" },
       "breakeven_days": { "name": "Days to break-even" },
-      "self_sufficiency": { "name": "Self-sufficiency" }
+      "self_sufficiency": { "name": "Self-consumption rate" },
+      "daily_average": { "name": "Daily avg. return" },
+      "monthly_estimate": { "name": "Monthly estimate" }
     }
   },
   "services": {

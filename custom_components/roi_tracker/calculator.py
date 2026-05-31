@@ -8,7 +8,7 @@ die berechneten Werte einen Neustart, ohne dass von vorn gezählt wird.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 @dataclass
@@ -60,6 +60,8 @@ class RoiResult:
     breakeven_days: float | None = None
     self_sufficiency_percent: float | None = None
     daily_average: float = 0.0
+    monthly_estimate: float = 0.0
+    yearly_estimate: float = 0.0
     attributes: dict = field(default_factory=dict)
 
 
@@ -162,6 +164,7 @@ def update(
     # Tagesdurchschnitt & Restlaufzeit
     daily_avg = 0.0
     breakeven_days: float | None = None
+    breakeven_date: str | None = None
     if state.first_update:
         start = datetime.fromisoformat(state.first_update)
         elapsed_days = max((now - start).total_seconds() / 86400.0, 0.0)
@@ -169,10 +172,17 @@ def update(
             daily_avg = total_return / elapsed_days
             if daily_avg > 0 and remaining > 0:
                 breakeven_days = remaining / daily_avg
+                breakeven_date = (
+                    now + timedelta(days=breakeven_days)
+                ).date().isoformat()
             elif remaining <= 0:
                 breakeven_days = 0.0
+                breakeven_date = now.date().isoformat()
 
-    # Autarkiegrad (nur sinnvoll, wenn Verbrauch & Einspeisung bekannt sind).
+    monthly_estimate = round(daily_avg * 30.44, 2)
+    yearly_estimate = round(daily_avg * 365.0, 2)
+
+    # Eigenverbrauchsquote (wie viel % der PV-Erzeugung selbst genutzt wird).
     # Batterie-Entladung zählt als selbst genutzte Energie.
     self_sufficiency: float | None = None
     self_used = state.total_consumption + state.total_battery_discharge
@@ -193,7 +203,14 @@ def update(
             round(self_sufficiency, 1) if self_sufficiency is not None else None
         ),
         daily_average=round(daily_avg, 2),
+        monthly_estimate=monthly_estimate,
+        yearly_estimate=yearly_estimate,
         attributes={
+            "investment": investment,
+            "daily_average": round(daily_avg, 2),
+            "monthly_estimate": monthly_estimate,
+            "yearly_estimate": yearly_estimate,
+            "breakeven_date": breakeven_date,
             "total_consumption": round(state.total_consumption, 3),
             "total_export": round(state.total_export, 3),
             "total_battery_discharge": round(state.total_battery_discharge, 3),
