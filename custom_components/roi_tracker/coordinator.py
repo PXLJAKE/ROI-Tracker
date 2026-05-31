@@ -29,6 +29,7 @@ from .const import (
     CONF_REWARD_FIXED,
     CONF_REWARD_MODE,
     CONF_REWARD_SENSOR,
+    CONF_SENSOR_RESET_DAILY,
     CONF_START_DATE,
     CONF_TEMPLATE,
     DEFAULT_UPDATE_INTERVAL_MINUTES,
@@ -378,6 +379,8 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
         production = self._read_number(cfg.get(CONF_PRODUCTION_SENSOR))
         grid_import = self._read_number(cfg.get(CONF_GRID_IMPORT_SENSOR))
 
+        reset_daily: bool = bool(cfg.get(CONF_SENSOR_RESET_DAILY, False))
+
         raw_base = cfg.get(CONF_BASELINE_RATE)
         baseline_rate = float(raw_base) if raw_base not in (None, "") else None
 
@@ -414,6 +417,7 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
             cost_total=cost_total,
             reward_total=reward_total,
             baseline_rate=baseline_rate,
+            reset_daily=reset_daily,
         )
 
         result.attributes["template"] = cfg.get(CONF_TEMPLATE, "custom")

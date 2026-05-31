@@ -38,6 +38,7 @@ from .const import (
     CONF_REWARD_FIXED,
     CONF_REWARD_MODE,
     CONF_REWARD_SENSOR,
+    CONF_SENSOR_RESET_DAILY,
     CONF_START_DATE,
     CONF_TEMPLATE,
     DOMAIN,
@@ -143,6 +144,9 @@ def _schema_setup(template: str, defaults: dict[str, Any]) -> vol.Schema:
         schema[_req(CONF_REWARD_MODE, defaults, PRICE_MODE_FIXED)] = (
             _price_mode_selector(include_cost=False, include_none=True)
         )
+
+    # Sensor-Typ: täglich/monatlich rücksetzend oder dauerhaft kumulativ
+    schema[_req(CONF_SENSOR_RESET_DAILY, defaults, False)] = selector.BooleanSelector()
 
     return vol.Schema(schema)
 

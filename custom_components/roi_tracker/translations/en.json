@@ -21,7 +21,8 @@
           "battery_discharge_sensor": "Discharged from battery (kWh, cumulative)",
           "grid_import_sensor": "Grid import (kWh, cumulative) – optional",
           "price_mode": "Where does your electricity price (import) come from?",
-          "reward_mode": "Where does your feed-in tariff come from?"
+          "reward_mode": "Where does your feed-in tariff come from?",
+          "sensor_reset_daily": "Sensors reset daily or monthly"
         },
         "data_description": {
           "investment": "One-time investment in € that should pay off (e.g. 20000).",
@@ -30,7 +31,8 @@
           "export_sensor": "Energy exported to the grid in kWh. Revenue = this × feed-in tariff.",
           "battery_discharge_sensor": "Energy discharged from battery in kWh. Counted as savings (× electricity price).",
           "grid_import_sensor": "Optional: cumulative grid import in kWh (e.g. from Tibber or smart meter). NOT subtracted from ROI – shown transparently so you can see how much you still buy from the grid.",
-          "price_mode": "Determines how the monetary value of your self-consumption is calculated."
+          "price_mode": "Determines how the monetary value of your self-consumption is calculated.",
+          "sensor_reset_daily": "Enable if your sensors reset daily (e.g. daily yield from inverter) or monthly instead of accumulating permanently. On detecting a reset, the current value is counted as the partial day's energy."
         }
       },
       "sources": {

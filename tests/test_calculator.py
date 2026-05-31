@@ -225,6 +225,38 @@ def test_breakeven_date_set_when_paid_off() -> None:
     assert r.attributes["breakeven_date"] is not None
 
 
+def test_daily_reset_sensor_accumulates_across_reset() -> None:
+    """Täglich rücksetzende Sensoren: Energie vor UND nach Reset wird gezählt."""
+    st = RoiState()
+    # Erster Messwert: 6 kWh seit Mitternacht
+    calculator.update(st, investment=1000, now=START, consumption=6.0, price_per_unit=0.30, reset_daily=True)
+    # Drei Stunden später: 8 kWh (2 kWh mehr)
+    r = calculator.update(st, investment=1000, now=START, consumption=8.0, price_per_unit=0.30, reset_daily=True)
+    assert r.savings == round((6.0 + 2.0) * 0.30, 2)  # 2.40 €
+
+    # Mitternacht: Sensor springt auf 0.5 kWh (Reset + 0,5 kWh seit Neustart)
+    r2 = calculator.update(st, investment=1000, now=START, consumption=0.5, price_per_unit=0.30, reset_daily=True)
+    # Delta = 0.5 (current nach Reset), gesamt: 8 + 0.5 = 8.5 kWh * 0.30
+    assert r2.savings == round(8.5 * 0.30, 2)  # 2.55 €
+
+
+def test_daily_reset_first_reading_counts() -> None:
+    """Beim ersten Messwert eines Reset-Sensors wird der aktuelle Wert direkt gezählt."""
+    st = RoiState()
+    # Sensor steht bei 4 kWh (Integration mittags eingerichtet)
+    r = calculator.update(st, investment=1000, now=START, consumption=4.0, price_per_unit=0.30, reset_daily=True)
+    assert r.savings == round(4.0 * 0.30, 2)  # 1.20 €
+
+
+def test_cumulative_sensor_ignores_reset() -> None:
+    """Kumulativer Sensor (Standard): Rückgang wird ignoriert (kein negatives Delta)."""
+    st = RoiState()
+    calculator.update(st, investment=1000, now=START, consumption=8.0, price_per_unit=0.30)
+    # Sensor geht zurück (Zähleraustausch o.ä.) → kein Delta
+    r = calculator.update(st, investment=1000, now=START, consumption=0.5, price_per_unit=0.30)
+    assert r.savings == 0.0  # Kumulativer Modus: Rückgang = 0
+
+
 def _run_all() -> None:
     fns = [v for k, v in globals().items() if k.startswith("test_") and callable(v)]
     for fn in fns:

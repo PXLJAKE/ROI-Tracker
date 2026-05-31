@@ -71,10 +71,10 @@ class RoiResult:
 
 
 def _delta(current: float | None, last: float | None) -> float:
-    """Positives Delta zwischen zwei kumulierten Zählerständen.
+    """Delta für kumulierte Dauerzähler (z.B. Gesamtertrag seit Installation).
 
-    Sinkt der Zählerstand (Reset des Quell-Sensors, z. B. Tagesreset), wird der
-    neue Stand als frischer Start gewertet und kein negatives Delta gezählt.
+    Sinkt der Wert (Sensor-Reset oder Zähleraustausch), wird 0 zurückgegeben,
+    um falsches Negativ-Delta zu vermeiden.
     """
     if current is None:
         return 0.0
@@ -82,6 +82,22 @@ def _delta(current: float | None, last: float | None) -> float:
         return 0.0
     if current < last:
         return 0.0
+    return current - last
+
+
+def _delta_reset(current: float | None, last: float | None) -> float:
+    """Delta für Sensoren die täglich/monatlich zurücksetzen.
+
+    Beim Erkennen eines Resets (current < last) wird ``current`` als Delta
+    gezählt – die Energie seit dem letzten Reset. Beim allerersten Messwert
+    (last=None) zählt der aktuelle Stand als heutiger Tageswert.
+    """
+    if current is None:
+        return 0.0
+    if last is None:
+        return current  # Erster Wert: heutigen Teiltagswert direkt zählen
+    if current < last:
+        return current  # Reset erkannt: von 0 weiterzählen
     return current - last
 
 
@@ -99,6 +115,7 @@ def update(
     cost_total: float | None = None,
     reward_total: float | None = None,
     baseline_rate: float | None = None,
+    reset_daily: bool = False,
 ) -> RoiResult:
     """Aktualisiert ``state`` anhand neuer Messwerte und gibt das Ergebnis zurück.
 
@@ -120,16 +137,17 @@ def update(
     if state.first_update is None:
         state.first_update = now.isoformat()
 
+    # Wähle die passende Delta-Funktion je nach Sensor-Typ
+    d = _delta_reset if reset_daily else _delta
+
     # --- Ersparnis durch Eigenverbrauch -------------------------------------
     if cost_total is not None:
-        # Fertiger €-Sensor: Delta direkt als Ersparnis werten.
-        d = _delta(cost_total, state.last_cost_total)
-        state.savings += d
+        delta_cost = d(cost_total, state.last_cost_total)
+        state.savings += delta_cost
         state.last_cost_total = cost_total
     elif consumption is not None:
-        d_units = _delta(consumption, state.last_consumption)
+        d_units = d(consumption, state.last_consumption)
         state.total_consumption += d_units
-        # Vergleichsbasis: baseline_rate (Alt-Lösung) hat Vorrang, sonst Bezugspreis.
         rate = baseline_rate if baseline_rate is not None else price_per_unit
         if rate is not None:
             state.savings += d_units * rate
@@ -137,33 +155,28 @@ def update(
 
     # --- Einnahmen durch Einspeisung/Abgabe ---------------------------------
     if reward_total is not None:
-        d = _delta(reward_total, state.last_reward_total)
-        state.revenue += d
+        delta_reward = d(reward_total, state.last_reward_total)
+        state.revenue += delta_reward
         state.last_reward_total = reward_total
     elif export is not None:
-        d_units = _delta(export, state.last_export)
+        d_units = d(export, state.last_export)
         state.total_export += d_units
         if reward_per_unit is not None:
             state.revenue += d_units * reward_per_unit
         state.last_export = export
 
     # --- Netzbezug (optional, nur für Gesamtbilanz-Anzeige) -----------------
-    # Der Netzbezug wird NICHT vom total_return abgezogen, weil er den ROI der
-    # PV-Anlage nicht mindert (man würde ihn ohne PV genauso zahlen).
-    # Die Werte dienen der transparenten Darstellung im Dashboard.
+    # Wird NICHT vom total_return abgezogen – nur für transparente Anzeige.
     if grid_import is not None:
-        d_grid = _delta(grid_import, state.last_grid_import)
+        d_grid = d(grid_import, state.last_grid_import)
         state.grid_import_kwh += d_grid
         if price_per_unit is not None:
             state.grid_import_cost += d_grid * price_per_unit
         state.last_grid_import = grid_import
 
     # --- Ersparnis durch Batterie-Entladung ---------------------------------
-    # Jede kWh aus der Batterie ersetzt Netzbezug -> Ersparnis zum Bezugspreis.
-    # Bei fertigem Kosten-Sensor (cost_total) ist die Batterie i. d. R. bereits
-    # darin enthalten -> dann nicht doppelt zählen.
     if battery_discharge is not None and cost_total is None:
-        d_units = _delta(battery_discharge, state.last_battery_discharge)
+        d_units = d(battery_discharge, state.last_battery_discharge)
         state.total_battery_discharge += d_units
         rate = baseline_rate if baseline_rate is not None else price_per_unit
         if rate is not None:

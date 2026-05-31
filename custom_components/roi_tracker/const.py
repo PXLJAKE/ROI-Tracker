@@ -31,6 +31,9 @@ CONF_REWARD_MODE: Final = "reward_mode"    # fixed | sensor | none
 CONF_REWARD_FIXED: Final = "reward_fixed"  # €/kWh
 CONF_REWARD_SENSOR: Final = "reward_sensor"
 
+# Sensor-Verhalten
+CONF_SENSOR_RESET_DAILY: Final = "sensor_reset_daily"  # True = Sensoren setzen täglich zurück
+
 # Nur für TEMPLATE_CUSTOM: manueller Vergleichswert
 CONF_BASELINE_RATE: Final = "baseline_rate"  # €/Einheit Alt-Lösung
 CONF_UNIT: Final = "unit"
