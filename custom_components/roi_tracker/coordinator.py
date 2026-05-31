@@ -20,7 +20,10 @@ from .const import (
     CONF_CONSUMPTION_SENSOR,
     CONF_COST_SENSOR,
     CONF_EXPORT_SENSOR,
+    CONF_FUEL_PRICE_FIXED,
+    CONF_FUEL_PRICE_SENSOR,
     CONF_INVESTMENT,
+    CONF_LEGACY_CONSUMPTION,
     CONF_PRICE_FIXED,
     CONF_PRICE_MODE,
     CONF_PRICE_SENSOR,
@@ -170,6 +173,29 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
             _LOGGER.debug("Sensor %s liefert keinen Zahlenwert: %s", entity_id, state.state)
             return None
 
+    def _compute_baseline_rate(self, cfg: dict) -> float | None:
+        """Berechnet baseline_rate aus zerlegten Altlösungs-Feldern (EV/Heizung).
+
+        Formel: legacy_consumption / 100 × fuel_price
+        Beispiel EV: 8,5 L/100km × 1,85 €/L / 100 = 0,15725 €/km
+
+        Falls kein legacy_consumption konfiguriert, wird die manuelle
+        baseline_rate verwendet (für benutzerdefinierte Anlagen).
+        """
+        raw_consumption = cfg.get(CONF_LEGACY_CONSUMPTION)
+        if raw_consumption not in (None, ""):
+            legacy_consumption = float(raw_consumption)
+            # Kraftstoffpreis: Sensor hat Vorrang vor festem Wert.
+            fuel_price = self._read_number(cfg.get(CONF_FUEL_PRICE_SENSOR))
+            if fuel_price is None:
+                raw_price = cfg.get(CONF_FUEL_PRICE_FIXED)
+                fuel_price = float(raw_price) if raw_price not in (None, "") else None
+            if fuel_price is not None:
+                return legacy_consumption / 100.0 * fuel_price
+        # Fallback: manuell eingegebene baseline_rate
+        raw_base = cfg.get(CONF_BASELINE_RATE)
+        return float(raw_base) if raw_base not in (None, "") else None
+
     async def _async_update_data(self) -> RoiResult:
         cfg = self.config
         investment = float(cfg.get(CONF_INVESTMENT, 0) or 0)
@@ -177,8 +203,10 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
         consumption = self._read_number(cfg.get(CONF_CONSUMPTION_SENSOR))
         export = self._read_number(cfg.get(CONF_EXPORT_SENSOR))
         battery_discharge = self._read_number(cfg.get(CONF_BATTERY_DISCHARGE_SENSOR))
-        baseline_rate = cfg.get(CONF_BASELINE_RATE)
-        baseline_rate = float(baseline_rate) if baseline_rate not in (None, "") else None
+
+        # Baseline: aus zerlegten Altlösungs-Feldern berechnen (EV/Heizung),
+        # Fallback auf manuell eingegebene baseline_rate (Custom/Legacy).
+        baseline_rate = self._compute_baseline_rate(cfg)
 
         # Bezugspreis je nach Modus
         price_mode = cfg.get(CONF_PRICE_MODE, PRICE_MODE_FIXED)

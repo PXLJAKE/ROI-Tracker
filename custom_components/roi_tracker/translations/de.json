@@ -16,7 +16,7 @@
           "investment": "Anschaffungskosten",
           "start_date": "Startdatum (optional, auch rückwirkend)",
           "production_sensor": "Erzeugte Energie (kWh, kumuliert)",
-          "consumption_sensor": "Eigenverbrauch (kWh, kumuliert)",
+          "consumption_sensor": "Eigenverbrauch / Kilometer (kumuliert)",
           "export_sensor": "Einspeisung ins Netz (kWh, kumuliert)",
           "battery_discharge_sensor": "Aus Batterie entnommen (kWh, kumuliert)",
           "price_mode": "Woher kommt dein Strompreis (Bezug)?",
@@ -25,8 +25,8 @@
         "data_description": {
           "investment": "Einmalige Investitionssumme in €, die sich amortisieren soll (z. B. 12000).",
           "start_date": "Optional ein Datum in der Vergangenheit. Die Berechnung startet dann rückwirkend ab diesem Tag aus der gespeicherten Sensor-Historie. Exakt bei festem Preis; setzt voraus, dass die Sensoren seit dem Datum Langzeit-Statistiken haben.",
-          "consumption_sensor": "Der selbst genutzte PV-Strom in kWh – NICHT der Netzbezug. Aus dieser Menge × Strompreis ergibt sich deine Ersparnis.",
-          "export_sensor": "Die ins Netz eingespeiste Energie in kWh. Daraus × Vergütung ergibt sich dein Einspeiseertrag.",
+          "consumption_sensor": "PV: selbst genutzter Strom in kWh – NICHT der Netzbezug. E-Auto: km-Zähler (Tacho/Odometer, kumuliert). Heizung: verbrauchte Energie in kWh.",
+          "export_sensor": "Die ins Netz eingespeiste Energie in kWh. Daraus x Vergütung ergibt sich dein Einspeiseertrag.",
           "battery_discharge_sensor": "Aus der Batterie entnommene Energie in kWh. Wird wie Eigenverbrauch mit dem Strompreis als Ersparnis gewertet.",
           "price_mode": "Bestimmt, wie der Geldwert deines Eigenverbrauchs berechnet wird. Den passenden Wert/Sensor gibst du im nächsten Schritt an."
         }
@@ -44,9 +44,25 @@
         "data_description": {
           "price_fixed": "Dein Arbeitspreis pro kWh, z. B. 0,30. Wird mit dem Eigenverbrauch multipliziert.",
           "price_sensor": "Ein Sensor, der den aktuellen Arbeitspreis in €/kWh liefert (z. B. Tibber). Jede selbst genutzte kWh wird mit dem jeweils aktuellen Preis bewertet.",
-          "cost_sensor": "Nur wählen, wenn du bereits einen Sensor hast, der den ersparten Betrag in € kumuliert. NICHT deine Stromrechnung/„accumulated cost“ – das wären Ausgaben, keine Ersparnis.",
+          "cost_sensor": "Nur wählen, wenn du bereits einen Sensor hast, der den ersparten Betrag in € kumuliert. NICHT deine Stromrechnung – das waeren Ausgaben, keine Ersparnis.",
           "reward_fixed": "Deine Einspeisevergütung pro kWh, z. B. 0,08.",
           "reward_sensor": "Ein Sensor, der den erhaltenen Einspeiseertrag in € kumuliert."
+        }
+      },
+      "legacy": {
+        "title": "Vergleich mit der Alt-Lösung",
+        "description": "Hier kannst du angeben, was deine alte Lösung (Verbrenner / alte Heizung) verbraucht hat. ROI Tracker berechnet damit, wie viel Geld du gegenueber der Alt-Lösung einsparst.\n\nAlle Felder sind optional. Leer lassen, wenn kein Vergleich gewünscht.",
+        "data": {
+          "legacy_consumption": "Verbrauch Alt-Lösung (pro 100 Einheiten)",
+          "legacy_fuel_type": "Kraftstoff-/Heizmittelart",
+          "fuel_price_fixed": "Kraftstoffpreis, fester Wert (€/Einheit)",
+          "fuel_price_sensor": "Kraftstoffpreis-Sensor (€/Einheit)"
+        },
+        "data_description": {
+          "legacy_consumption": "Fuer E-Auto: Verbrauch des Verbrenners in L/100 km (z. B. 8,5). Fuer Heizung: Verbrauch in L/m2/Jahr oder kWh/m2/Jahr x 100 (je nach Heizmittel). Wird mit dem Kraftstoffpreis multipliziert.",
+          "legacy_fuel_type": "Waehle das Kraftstoff- oder Heizmittel der Alt-Lösung. Nur zur Information – hat keinen Einfluss auf die Berechnung.",
+          "fuel_price_fixed": "Preis pro Einheit (Liter, m3, kWh) des Kraftstoffs/Heizmittels, z. B. 1,85 fuer Diesel.",
+          "fuel_price_sensor": "Optional: HA-Sensor, der den aktuellen Kraftstoffpreis liefert. Hat Vorrang vor dem festen Wert."
         }
       }
     },
@@ -64,7 +80,7 @@
           "investment": "Anschaffungskosten",
           "start_date": "Startdatum (optional, auch rückwirkend)",
           "production_sensor": "Erzeugte Energie (kWh, kumuliert)",
-          "consumption_sensor": "Eigenverbrauch (kWh, kumuliert)",
+          "consumption_sensor": "Eigenverbrauch / Kilometer (kumuliert)",
           "export_sensor": "Einspeisung ins Netz (kWh, kumuliert)",
           "battery_discharge_sensor": "Aus Batterie entnommen (kWh, kumuliert)",
           "price_mode": "Woher kommt dein Strompreis (Bezug)?",
@@ -72,7 +88,7 @@
         },
         "data_description": {
           "investment": "Einmalige Investitionssumme in €, die sich amortisieren soll.",
-          "consumption_sensor": "Der selbst genutzte PV-Strom in kWh – NICHT der Netzbezug.",
+          "consumption_sensor": "PV: selbst genutzter Strom in kWh – NICHT der Netzbezug. E-Auto: km-Zähler (kumuliert). Heizung: verbrauchte Energie in kWh.",
           "export_sensor": "Die ins Netz eingespeiste Energie in kWh.",
           "battery_discharge_sensor": "Aus der Batterie entnommene Energie in kWh."
         }
@@ -90,6 +106,21 @@
         "data_description": {
           "price_sensor": "Sensor mit aktuellem Arbeitspreis in €/kWh (z. B. Tibber).",
           "cost_sensor": "Nur ein Sensor, der den ersparten Betrag in € kumuliert – nicht die Stromrechnung."
+        }
+      },
+      "legacy": {
+        "title": "Vergleich mit der Alt-Lösung",
+        "description": "Passe die Alt-Lösungs-Daten an. Leer lassen deaktiviert den Vergleich.",
+        "data": {
+          "legacy_consumption": "Verbrauch Alt-Lösung (pro 100 Einheiten)",
+          "legacy_fuel_type": "Kraftstoff-/Heizmittelart",
+          "fuel_price_fixed": "Kraftstoffpreis, fester Wert (€/Einheit)",
+          "fuel_price_sensor": "Kraftstoffpreis-Sensor (€/Einheit)"
+        },
+        "data_description": {
+          "legacy_consumption": "Fuer E-Auto: L/100 km des Verbrenners. Fuer Heizung: Verbrauch pro 100 Einheiten.",
+          "fuel_price_fixed": "Preis pro Liter, m3 oder kWh des alten Energieträgers.",
+          "fuel_price_sensor": "Sensor mit aktuellem Kraftstoffpreis. Hat Vorrang vor dem festen Wert."
         }
       }
     }
@@ -109,6 +140,18 @@
         "sensor": "Dynamischer Preis-Sensor (€/kWh, z. B. Tibber)",
         "cost_sensor": "Fertiger €-Wert-Sensor",
         "none": "Keine"
+      }
+    },
+    "fuel_type": {
+      "options": {
+        "diesel": "Diesel",
+        "benzin": "Benzin (Super/E10)",
+        "lpg": "Autogas (LPG)",
+        "cng": "Erdgas (CNG)",
+        "erdgas": "Erdgas (Heizung)",
+        "oel": "Heizöl",
+        "pellets": "Holzpellets",
+        "fernwaerme": "Fernwärme"
       }
     }
   },
