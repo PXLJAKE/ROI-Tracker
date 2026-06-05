@@ -4,10 +4,9 @@ reset:
     Setzt einen ROI-Rechner auf null zurück (alle kumulierten Werte und der
     gespeicherte Zustand werden gelöscht). Die Berechnung startet danach neu.
   target:
-    device:
-      integration: roi_tracker
     entity:
       integration: roi_tracker
+      domain: sensor
 
 recalculate:
   name: Rückwirkend neu berechnen
@@ -16,10 +15,9 @@ recalculate:
     gespeicherten Sensor-Historie neu – ab dem angegebenen Datum oder, falls
     keines angegeben ist, ab dem in der Anlage konfigurierten Startdatum.
   target:
-    device:
-      integration: roi_tracker
     entity:
       integration: roi_tracker
+      domain: sensor
   fields:
     start_date:
       name: Startdatum
