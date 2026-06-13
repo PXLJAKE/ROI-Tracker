@@ -263,23 +263,37 @@ class RoiTrackerCard extends HTMLElement {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
 
-    // Stunden-Buckets seit Mitternacht summieren statt period:"day": die
-    // Tages-Aggregation entsteht erst aus fertig kompilierten Stunden und ist
-    // für den laufenden Tag oft noch leer. Stunden-Buckets enthalten dagegen
-    // zuverlässig auch die aktuelle Teilstunde (aus Kurzzeit-Statistik).
+    // Tageswert = aktueller Zählerstand − Stand um Mitternacht, direkt aus der
+    // State-Historie. Bewusst NICHT über die Langzeit-Statistik: deren
+    // Stunden-Buckets entstehen erst verzögert (Kompilierung im Stundentakt)
+    // und fehlen oft für den laufenden Tag. Die State-Historie liefert dagegen
+    // sofort den Mitternachts-Stand (erster Punkt im Fenster) und den aktuellen
+    // Wert (letzter Punkt) – inkl. der laufenden Stunde.
     this._hass.callWS({
-      type: "recorder/statistics_during_period",
+      type: "history/history_during_period",
       start_time: start.toISOString(),
       end_time: new Date().toISOString(),
-      statistic_ids: ids,
-      period: "hour",
-      units: { currency: "EUR" },
-      types: ["change"],
+      entity_ids: ids,
+      minimal_response: true,
+      no_attributes: true,
     }).then(result => {
       const out = {};
+      const num = (p) => {
+        const v = parseFloat(p && (p.s ?? p.state));
+        return Number.isFinite(v) ? v : null;
+      };
       for (const k of keys) {
         const arr = ent[k] && result ? result[ent[k]] : null;
-        if (arr && arr.length) out[k] = arr.reduce((a, m) => a + (m.change || 0), 0);
+        if (!arr || !arr.length) continue;
+        let first = null, last = null;
+        for (const p of arr) {
+          const v = num(p);
+          if (v == null) continue;       // "unavailable"/"unknown" überspringen
+          if (first == null) first = v;
+          last = v;
+        }
+        // max(0, …): schützt vor negativem Wert nach einem Zähler-Reset
+        if (first != null && last != null) out[k] = Math.max(0, last - first);
       }
       this._todayCache = out;
       this._todayCacheTime = Date.now();
@@ -833,7 +847,7 @@ window.customCards.push({
 });
 
 console.info(
-  "%c ROI-TRACKER-CARD %c v0.3.2 ",
+  "%c ROI-TRACKER-CARD %c v0.3.3 ",
   "color:#fff;background:#03a9f4;font-weight:700;",
   "color:#03a9f4;background:#fff;font-weight:700;"
 );
