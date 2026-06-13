@@ -15,23 +15,24 @@
           "name": "Asset name",
           "investment": "Investment cost",
           "start_date": "Start date (optional, can be in the past)",
-          "production_sensor": "PV production (kWh, cumulative)",
-          "consumption_sensor": "Self-consumption from PV/battery (kWh, cumulative)",
+          "consumption_sensor": "PV self-consumption (kWh, cumulative)",
           "export_sensor": "Exported to grid (kWh, cumulative)",
-          "battery_discharge_sensor": "Discharged from battery (kWh, cumulative)",
+          "battery_discharge_sensor": "Discharged from battery (kWh, cumulative) – optional",
           "grid_import_sensor": "Grid import (kWh, cumulative) – optional",
           "price_mode": "Where does your electricity price (import) come from?",
+          "baseline_rate": "Baseline cost of the old solution (€/kWh)",
           "reward_mode": "Where does your feed-in tariff come from?",
           "sensor_reset_daily": "Sensors reset daily or monthly"
         },
         "data_description": {
           "investment": "One-time investment in € that should pay off (e.g. 20000).",
           "start_date": "Optionally a date in the past. The calculation starts retroactively from that day using stored sensor history.",
-          "consumption_sensor": "Self-consumption in kWh – the electricity you use directly from PV or battery. NOT grid import. Savings = this × electricity price.",
+          "consumption_sensor": "Electricity used directly from PV in kWh – NOT grid import. Important: if you set a battery sensor below, this value must NOT include battery discharge, otherwise it is counted twice. Savings = this × electricity price.",
           "export_sensor": "Energy exported to the grid in kWh. Revenue = this × feed-in tariff.",
-          "battery_discharge_sensor": "Energy discharged from battery in kWh. Counted as savings (× electricity price).",
+          "battery_discharge_sensor": "Energy discharged from battery in kWh. Counted as savings and shown separately. Leave empty if your self-consumption sensor already includes the battery.",
           "grid_import_sensor": "Optional: cumulative grid import in kWh (e.g. from Tibber or smart meter). NOT subtracted from ROI – shown transparently so you can see how much you still buy from the grid.",
           "price_mode": "Determines how the monetary value of your self-consumption is calculated.",
+          "baseline_rate": "What one kWh would have cost you with the old solution. Savings are the difference to the current price.",
           "sensor_reset_daily": "Enable if your sensors reset daily (e.g. daily yield from inverter) or monthly instead of accumulating permanently. On detecting a reset, the current value is counted as the partial day's energy."
         }
       },
@@ -67,17 +68,19 @@
           "name": "Asset name",
           "investment": "Investment cost",
           "start_date": "Start date (optional, can be in the past)",
-          "production_sensor": "PV production (kWh, cumulative)",
-          "consumption_sensor": "Self-consumption from PV/battery (kWh, cumulative)",
+          "consumption_sensor": "PV self-consumption (kWh, cumulative)",
           "export_sensor": "Exported to grid (kWh, cumulative)",
-          "battery_discharge_sensor": "Discharged from battery (kWh, cumulative)",
+          "battery_discharge_sensor": "Discharged from battery (kWh, cumulative) – optional",
           "grid_import_sensor": "Grid import (kWh, cumulative) – optional",
           "price_mode": "Where does your electricity price (import) come from?",
-          "reward_mode": "Where does your feed-in tariff come from?"
+          "baseline_rate": "Baseline cost of the old solution (€/kWh)",
+          "reward_mode": "Where does your feed-in tariff come from?",
+          "sensor_reset_daily": "Sensors reset daily or monthly"
         },
         "data_description": {
-          "consumption_sensor": "Self-consumption from PV/battery – NOT grid import.",
-          "grid_import_sensor": "Optional: cumulative grid import (display only, not deducted from ROI)."
+          "consumption_sensor": "Direct PV self-consumption – NOT grid import. Do not include battery discharge if a battery sensor is set.",
+          "grid_import_sensor": "Optional: cumulative grid import (display only, not deducted from ROI).",
+          "sensor_reset_daily": "Enable if sensors reset daily or monthly."
         }
       },
       "sources": {

@@ -19,6 +19,10 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import RoiConfigEntry
 from .calculator import RoiResult
 from .const import (
+    CONF_BATTERY_DISCHARGE_SENSOR,
+    CONF_CONSUMPTION_SENSOR,
+    CONF_EXPORT_SENSOR,
+    CONF_GRID_IMPORT_SENSOR,
     CONF_TEMPLATE,
     DOMAIN,
     SENSOR_AMORTIZATION,
@@ -48,6 +52,9 @@ class RoiSensorDescription(SensorEntityDescription):
     """Beschreibung eines ROI-Sensors inkl. Wert-Extraktor."""
 
     value_fn: Callable[[RoiResult], float | None]
+    # Sensor wird nur angelegt, wenn dieser Config-Schlüssel gesetzt ist
+    # (None = immer anlegen). Verhindert leere Entitäten ohne Datenquelle.
+    required_conf: str | None = None
 
 
 SENSOR_DESCRIPTIONS: tuple[RoiSensorDescription, ...] = (
@@ -77,6 +84,7 @@ SENSOR_DESCRIPTIONS: tuple[RoiSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         icon="mdi:battery-charging",
         value_fn=lambda r: r.battery_savings,
+        required_conf=CONF_BATTERY_DISCHARGE_SENSOR,
     ),
     RoiSensorDescription(
         key=SENSOR_REVENUE,
@@ -125,6 +133,7 @@ SENSOR_DESCRIPTIONS: tuple[RoiSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:home-lightning-bolt",
         value_fn=lambda r: r.self_sufficiency_percent,
+        required_conf=CONF_CONSUMPTION_SENSOR,
     ),
     # Durchschnitts-/Prognosewerte: bewusst OHNE device_class monetary –
     # monetary erlaubt nur state_class total, measurement wäre ungültig.
@@ -151,7 +160,8 @@ SENSOR_DESCRIPTIONS: tuple[RoiSensorDescription, ...] = (
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         icon="mdi:transmission-tower-import",
-        value_fn=lambda r: r.grid_import_cost if r.grid_import_cost else None,
+        value_fn=lambda r: r.grid_import_cost,
+        required_conf=CONF_GRID_IMPORT_SENSOR,
     ),
     # ── Permanente kWh-Summier-Sensoren ──────────────────────────────────────
     # Diese Sensoren akkumulieren dauerhaft, auch wenn der Quell-Sensor täglich
@@ -163,7 +173,8 @@ SENSOR_DESCRIPTIONS: tuple[RoiSensorDescription, ...] = (
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,
         icon="mdi:home-lightning-bolt-outline",
-        value_fn=lambda r: r.total_consumption_kwh if r.total_consumption_kwh else None,
+        value_fn=lambda r: r.total_consumption_kwh,
+        required_conf=CONF_CONSUMPTION_SENSOR,
     ),
     RoiSensorDescription(
         key=SENSOR_TOTAL_EXPORT_KWH,
@@ -172,7 +183,8 @@ SENSOR_DESCRIPTIONS: tuple[RoiSensorDescription, ...] = (
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,
         icon="mdi:transmission-tower-export",
-        value_fn=lambda r: r.total_export_kwh if r.total_export_kwh else None,
+        value_fn=lambda r: r.total_export_kwh,
+        required_conf=CONF_EXPORT_SENSOR,
     ),
     RoiSensorDescription(
         key=SENSOR_TOTAL_BATTERY_DISCHARGE_KWH,
@@ -181,7 +193,8 @@ SENSOR_DESCRIPTIONS: tuple[RoiSensorDescription, ...] = (
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,
         icon="mdi:battery-arrow-down",
-        value_fn=lambda r: r.total_battery_discharge_kwh if r.total_battery_discharge_kwh else None,
+        value_fn=lambda r: r.total_battery_discharge_kwh,
+        required_conf=CONF_BATTERY_DISCHARGE_SENSOR,
     ),
     RoiSensorDescription(
         key=SENSOR_GRID_IMPORT_KWH,
@@ -190,7 +203,8 @@ SENSOR_DESCRIPTIONS: tuple[RoiSensorDescription, ...] = (
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,
         icon="mdi:transmission-tower-import",
-        value_fn=lambda r: r.grid_import_kwh if r.grid_import_kwh else None,
+        value_fn=lambda r: r.grid_import_kwh,
+        required_conf=CONF_GRID_IMPORT_SENSOR,
     ),
 )
 
@@ -200,11 +214,18 @@ async def async_setup_entry(
     entry: RoiConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Legt die Sensoren für eine Anlage an."""
+    """Legt die Sensoren für eine Anlage an.
+
+    Sensoren ohne konfigurierte Datenquelle (z. B. Batterie-Ersparnis ohne
+    Batterie-Sensor) werden gar nicht erst erzeugt – so gibt es keine
+    dauerhaft leeren Entitäten.
+    """
     coordinator = entry.runtime_data
+    cfg = coordinator.config
     async_add_entities(
         RoiSensor(coordinator, entry, description)
         for description in SENSOR_DESCRIPTIONS
+        if description.required_conf is None or cfg.get(description.required_conf)
     )
 
 

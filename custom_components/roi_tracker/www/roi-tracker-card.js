@@ -1,13 +1,20 @@
 /**
- * ROI Tracker Card  v0.2.9
+ * ROI Tracker Card  v0.3.0
  *
  * Konfiguration:
  *   type: custom:roi-tracker-card
  *   device: <device_id>
- *   title: "Meine PV-Anlage"     # optional
+ *   title: "Meine PV-Anlage"     # optional – leer = kein Titel (kompakter)
  *   language: de | en            # optional, Standard: HA-Sprache
  *   show_donut: true             # Amortisations-Donut (Standard: true)
  *   show_tiles: true             # Kennzahlen-Kacheln (Standard: true)
+ *   tile_daily: true             # Kachel Ø täglich (Standard: true)
+ *   tile_monthly: true           # Kachel Ø monatlich (Standard: true)
+ *   tile_yearly: true            # Kachel Prognose/Jahr (Standard: true)
+ *   tile_breakeven: true         # Kachel Break-Even (Standard: true)
+ *   tile_roi: true               # Kachel ROI (Standard: true)
+ *   tile_self: true              # Kachel Eigenverbrauch-% (Standard: true)
+ *   show_today: true             # Heute: Ersparnis & Einspeisung (Standard: true)
  *   show_breakdown: true         # Aufschlüsselung (Standard: true)
  *   show_energy: true            # kWh-Statistiken (Standard: true)
  *   show_chart: true             # Monatsbalken (Standard: true)
@@ -43,6 +50,8 @@ const TXT = {
     days: "Tagen",
     years: "Jahren",
     loading: "Lade Verlaufsdaten…",
+    today_title: "Heute",
+    today_sum: "Gesamt heute",
   },
   en: {
     total_return: "Total return",
@@ -73,6 +82,8 @@ const TXT = {
     days: "days",
     years: "years",
     loading: "Loading history…",
+    today_title: "Today",
+    today_sum: "Total today",
   },
 };
 
@@ -98,6 +109,9 @@ class RoiTrackerCard extends HTMLElement {
     this._statsCache = null;
     this._statsCacheTime = 0;
     this._statsFetching = false;
+    this._todayCache = null;
+    this._todayCacheTime = 0;
+    this._todayFetching = false;
     this._root = null;
   }
 
@@ -107,6 +121,7 @@ class RoiTrackerCard extends HTMLElement {
     this._hass = hass;
     this._render();
     this._maybeRefreshStats();
+    this._maybeRefreshToday();
   }
 
   getCardSize() { return 6; }
@@ -175,7 +190,9 @@ class RoiTrackerCard extends HTMLElement {
   }
 
   _fmtKwh(v) {
-    if (v == null || v === 0) return null;
+    // 0 ist ein gültiger Wert (z. B. Netzbezug 0 kWh) und wird angezeigt;
+    // nur null/undefined (Sensor existiert nicht) blendet die Zeile aus.
+    if (v == null) return null;
     const locale = this._lang() === "de" ? "de-DE" : "en-US";
     return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(v) + " kWh";
   }
@@ -227,6 +244,47 @@ class RoiTrackerCard extends HTMLElement {
     }).catch(() => {
       this._statsCache = [];
       this._statsFetching = false;
+    });
+  }
+
+  // Tageswerte (heute): Ersparnis, Batterie, Einspeisung als "change" seit
+  // Mitternacht aus der Recorder-Statistik.
+  _maybeRefreshToday() {
+    if (this._config.show_today === false || !this._hass) return;
+    const ent = this._resolveEntities();
+    const keys = ["savings", "battery_savings", "revenue"];
+    const ids = keys.map(k => ent[k]).filter(Boolean);
+    if (!ids.length) return;
+    const now = Date.now();
+    if (this._todayCache && now - this._todayCacheTime < 300_000) return;
+    if (this._todayFetching) return;
+    this._todayFetching = true;
+
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+
+    this._hass.callWS({
+      type: "recorder/statistics_during_period",
+      start_time: start.toISOString(),
+      end_time: new Date().toISOString(),
+      statistic_ids: ids,
+      period: "day",
+      units: { currency: "EUR" },
+      types: ["change"],
+    }).then(result => {
+      const out = {};
+      for (const k of keys) {
+        const arr = ent[k] && result ? result[ent[k]] : null;
+        if (arr && arr.length) out[k] = arr.reduce((a, m) => a + (m.change || 0), 0);
+      }
+      this._todayCache = out;
+      this._todayCacheTime = Date.now();
+      this._todayFetching = false;
+      this._render();
+    }).catch(() => {
+      this._todayCache = {};
+      this._todayCacheTime = Date.now();
+      this._todayFetching = false;
     });
   }
 
@@ -290,7 +348,7 @@ class RoiTrackerCard extends HTMLElement {
       [t.export_kwh, this._fmtKwh(exportKwh), "dot-green"],
       [t.battery_kwh, this._fmtKwh(batteryKwh), "dot-orange"],
       [t.grid_import, this._fmtKwh(gridKwh), "dot-grey"],
-      gridCost > 0 ? [t.grid_cost, this._fmt(gridCost, 0), "dot-grey"] : null,
+      gridCost != null ? [t.grid_cost, this._fmt(gridCost, 0), "dot-grey"] : null,
     ].filter(r => r && r[1]);
 
     if (!rows.length) return "";
@@ -304,6 +362,38 @@ class RoiTrackerCard extends HTMLElement {
             <span class="energy-val">${val}</span>
           </div>`
         ).join("")}
+      </div>`;
+  }
+
+  // ── Heute-Sektion ─────────────────────────────────────────────────────────
+
+  _renderToday() {
+    const t = TXT[this._lang()];
+    const data = this._todayCache;
+    if (!data) return "";  // erscheint, sobald die Statistik geladen ist
+    const rows = [
+      ["savings", t.savings, "dot-blue"],
+      ["battery_savings", t.battery_savings, "dot-orange"],
+      ["revenue", t.revenue, "dot-green"],
+    ].filter(([key]) => data[key] != null);
+    if (!rows.length) return "";
+
+    const sum = rows.reduce((a, [key]) => a + data[key], 0);
+    return `
+      <div class="section-title">${t.today_title}</div>
+      <div class="energy-rows">
+        ${rows.map(([key, label, dot]) =>
+          `<div class="energy-row">
+            <span class="dot ${dot}"></span>
+            <span class="energy-lbl">${label}</span>
+            <span class="energy-val">+${this._fmt(data[key])}</span>
+          </div>`
+        ).join("")}
+        ${rows.length > 1 ? `<div class="energy-row today-sum">
+          <span class="dot dot-grey"></span>
+          <span class="energy-lbl">${t.today_sum}</span>
+          <span class="energy-val">+${this._fmt(sum)}</span>
+        </div>` : ""}
       </div>`;
   }
 
@@ -357,15 +447,18 @@ class RoiTrackerCard extends HTMLElement {
     if (!this._hass) return;
     const t = TXT[this._lang()];
     const ent = this._resolveEntities();
-    const title = this._config.title || "ROI Tracker";
+    // Leerer Titel = kein Header → kompaktere Karte
+    const title = (this._config.title || "").trim();
     const showDonut = this._config.show_donut !== false;
     const showTiles = this._config.show_tiles !== false;
+    const showToday = this._config.show_today !== false;
     const showChart = this._config.show_chart !== false;
     const showBreakdown = this._config.show_breakdown !== false;
     const showEnergy = this._config.show_energy !== false;
+    const headerHtml = title ? `<div class="card-header">${title}</div>` : "";
 
     if (!this._config.device && (!this._config.entities || !Object.keys(ent).length)) {
-      this._setHtml(`<ha-card header="${title}">
+      this._setHtml(`<ha-card>${headerHtml}
         <div class="empty">${t.no_device}</div></ha-card>`);
       return;
     }
@@ -399,14 +492,15 @@ class RoiTrackerCard extends HTMLElement {
 
     const pct = amort ?? 0;
 
-    // Kacheln
+    // Kacheln – jede einzeln abschaltbar (tile_*, Standard: an)
+    const tileOn = (k) => this._config[k] !== false;
     const tileData = [
-      { label: t.daily, val: this._fmt(daily) },
-      { label: t.monthly, val: this._fmt(monthly) },
-      { label: t.yearly, val: this._fmt(yearlyEst) },
-      { label: t.breakeven, val: this._fmtDate(breakevenDate) || this._fmtBreakeven(breakevenDays, t) },
-      roi != null ? { label: t.roi, val: `${roi} %` } : null,
-      selfCons != null ? { label: t.self_consumption, val: `${selfCons} %` } : null,
+      tileOn("tile_daily") ? { label: t.daily, val: this._fmt(daily) } : null,
+      tileOn("tile_monthly") ? { label: t.monthly, val: this._fmt(monthly) } : null,
+      tileOn("tile_yearly") ? { label: t.yearly, val: this._fmt(yearlyEst) } : null,
+      tileOn("tile_breakeven") ? { label: t.breakeven, val: this._fmtDate(breakevenDate) || this._fmtBreakeven(breakevenDays, t) } : null,
+      tileOn("tile_roi") && roi != null ? { label: t.roi, val: `${roi} %` } : null,
+      tileOn("tile_self") && selfCons != null ? { label: t.self_consumption, val: `${selfCons} %` } : null,
     ].filter(Boolean);
 
     const tiles = tileData.map(ti =>
@@ -416,14 +510,15 @@ class RoiTrackerCard extends HTMLElement {
       </div>`
     ).join("");
 
+    const todayHtml = showToday ? this._renderToday() : "";
     const breakdownHtml = showBreakdown ? this._renderStackedBar(savings, revenue, battery) : "";
     const energyHtml = showEnergy ? this._renderEnergy(consumKwh, exportKwh, battKwh, gridKwh, gridCost) : "";
     const chartHtml = showChart ? this._renderMonthlyChart() : "";
 
     this._setHtml(`
       <ha-card>
-        <div class="card-header">${title}</div>
-        <div class="content">
+        ${headerHtml}
+        <div class="content${title ? "" : " no-title"}">
 
           <div class="hero">
             ${showDonut ? this._renderDonut(pct) : ""}
@@ -438,8 +533,9 @@ class RoiTrackerCard extends HTMLElement {
             </div>
           </div>
 
-          ${showTiles ? `<div class="tiles">${tiles}</div>` : ""}
+          ${showTiles && tileData.length ? `<div class="tiles">${tiles}</div>` : ""}
 
+          ${todayHtml ? `<div class="section">${todayHtml}</div>` : ""}
           ${breakdownHtml ? `<div class="section">${breakdownHtml}</div>` : ""}
           ${energyHtml ? `<div class="section">${energyHtml}</div>` : ""}
           ${chartHtml ? `<div class="section">${chartHtml}</div>` : ""}
@@ -458,6 +554,8 @@ class RoiTrackerCard extends HTMLElement {
       .card-header{padding:12px 16px 0;font-size:1.1em;font-weight:600;
         color:var(--ha-card-header-color,var(--primary-text-color))}
       .content{padding:8px 16px 16px}
+      .content.no-title{padding-top:16px}
+      .today-sum{border-top:1px solid var(--divider-color,#e0e0e0);padding-top:4px;margin-top:2px}
       /* Hero */
       .hero{display:flex;align-items:center;gap:16px;margin-bottom:12px}
       .donut{width:90px;height:90px;flex-shrink:0}
@@ -579,10 +677,21 @@ class RoiTrackerCardEditor extends HTMLElement {
     const SECTIONS = [
       ["show_donut", lang === "de" ? "Amortisations-Donut" : "Amortization donut"],
       ["show_tiles", lang === "de" ? "Kennzahlen-Kacheln" : "Metric tiles"],
+      ["show_today", lang === "de" ? "Heute (Ersparnis & Einspeisung)" : "Today (savings & feed-in)"],
       ["show_breakdown", lang === "de" ? "Rückfluss-Aufschlüsselung" : "Return breakdown"],
       ["show_energy", lang === "de" ? "kWh-Statistiken" : "Energy stats (kWh)"],
       ["show_chart", lang === "de" ? "Monatsbalken-Diagramm" : "Monthly chart"],
     ];
+    // Einzelne Kacheln – eingerückt unter "Kennzahlen-Kacheln"
+    const TILES = [
+      ["tile_daily", lang === "de" ? "Ø täglich" : "Avg. daily"],
+      ["tile_monthly", lang === "de" ? "Ø monatlich" : "Avg. monthly"],
+      ["tile_yearly", lang === "de" ? "Prognose/Jahr" : "Est. yearly"],
+      ["tile_breakeven", "Break-Even"],
+      ["tile_roi", "ROI"],
+      ["tile_self", lang === "de" ? "Eigenverbrauch-%" : "Self-cons. %"],
+    ];
+    const ALL_TOGGLES = [...SECTIONS, ...TILES];
 
     // Grundgerüst nur einmal bauen – sonst verliert das Titel-Feld beim
     // Tippen den Fokus (hass-Updates feuern alle paar Sekunden).
@@ -601,6 +710,7 @@ class RoiTrackerCardEditor extends HTMLElement {
           .group-label { font-size:.85em; font-weight:600; color:var(--secondary-text-color);
             margin-bottom:2px; }
           .row-check { display:flex; align-items:center; gap:10px; }
+          .row-check.indent { margin-left:26px; }
           .row-check input { width:18px; height:18px; accent-color:var(--primary-color,#03a9f4); }
           .row-check label { font-size:.9em; color:var(--primary-text-color); margin:0; cursor:pointer; }
         </style>
@@ -613,22 +723,32 @@ class RoiTrackerCardEditor extends HTMLElement {
               : "No ROI Tracker asset found – set up the integration first."}</div>
           </div>
           <div class="row">
-            <label>${lang === "de" ? "Titel (optional)" : "Title (optional)"}</label>
-            <input id="title" type="text" placeholder="ROI Tracker"/>
+            <label>${lang === "de"
+              ? "Titel (optional – leer = kein Titel)"
+              : "Title (optional – empty = no header)"}</label>
+            <input id="title" type="text" placeholder="${lang === "de" ? "Kein Titel" : "No title"}"/>
           </div>
           <div class="group-label">${lang === "de" ? "Anzeigen:" : "Show:"}</div>
-          ${SECTIONS.map(([key, label]) => `
+          ${SECTIONS.map(([key, label]) => {
+            const row = `
             <div class="row-check">
               <input id="chk-${key}" type="checkbox"/>
               <label for="chk-${key}">${label}</label>
-            </div>`).join("")}
+            </div>`;
+            if (key !== "show_tiles") return row;
+            return row + TILES.map(([tKey, tLabel]) => `
+            <div class="row-check indent">
+              <input id="chk-${tKey}" type="checkbox"/>
+              <label for="chk-${tKey}">${tLabel}</label>
+            </div>`).join("");
+          }).join("")}
         </div>`;
 
       root.getElementById("device").addEventListener("change", (e) =>
         this._emit({ ...this._config, device: e.target.value }));
       root.getElementById("title").addEventListener("input", (e) =>
         this._emit({ ...this._config, title: e.target.value }));
-      for (const [key] of SECTIONS) {
+      for (const [key] of ALL_TOGGLES) {
         root.getElementById(`chk-${key}`).addEventListener("change", (e) =>
           this._emit({ ...this._config, [key]: e.target.checked }));
       }
@@ -651,7 +771,7 @@ class RoiTrackerCardEditor extends HTMLElement {
     const titleInput = root.getElementById("title");
     if (root.activeElement !== titleInput) titleInput.value = cfg.title || "";
 
-    for (const [key] of SECTIONS) {
+    for (const [key] of ALL_TOGGLES) {
       root.getElementById(`chk-${key}`).checked = cfg[key] !== false;
     }
   }
@@ -679,7 +799,7 @@ window.customCards.push({
 });
 
 console.info(
-  "%c ROI-TRACKER-CARD %c v0.2.9 ",
+  "%c ROI-TRACKER-CARD %c v0.3.0 ",
   "color:#fff;background:#03a9f4;font-weight:700;",
   "color:#03a9f4;background:#fff;font-weight:700;"
 );

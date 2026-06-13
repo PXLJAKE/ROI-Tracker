@@ -14,12 +14,15 @@ CONF_INVESTMENT: Final = "investment"
 CONF_START_DATE: Final = "start_date"
 
 # Energie-/Mengen-Sensoren (kWh)
-CONF_PRODUCTION_SENSOR: Final = "production_sensor"      # erzeugte PV-Energie
-CONF_CONSUMPTION_SENSOR: Final = "consumption_sensor"    # Eigenverbrauch (PV direkt + Batterie)
+CONF_CONSUMPTION_SENSOR: Final = "consumption_sensor"    # Eigenverbrauch aus PV
 CONF_EXPORT_SENSOR: Final = "export_sensor"              # eingespeiste Energie
-CONF_BATTERY_CHARGE_SENSOR: Final = "battery_charge_sensor"
 CONF_BATTERY_DISCHARGE_SENSOR: Final = "battery_discharge_sensor"
-CONF_GRID_IMPORT_SENSOR: Final = "grid_import_sensor"    # Netzbezug (optional, Gesamtbilanz)
+CONF_GRID_IMPORT_SENSOR: Final = "grid_import_sensor"    # Netzbezug (optional, nur Anzeige)
+
+# Veraltete Schlüssel (werden nicht mehr abgefragt, alte Einträge können sie
+# noch in entry.data haben – Konstanten bleiben für Abwärtskompatibilität):
+CONF_PRODUCTION_SENSOR: Final = "production_sensor"
+CONF_BATTERY_CHARGE_SENSOR: Final = "battery_charge_sensor"
 
 # Preise / Erträge -----------------------------------------------------------
 CONF_PRICE_MODE: Final = "price_mode"      # fixed | sensor | cost_sensor
@@ -60,10 +63,8 @@ TEMPLATE_DEFAULTS: Final = {
         "unit": "kWh",
         "currency_unit": "€/kWh",
         "fields": [
-            CONF_PRODUCTION_SENSOR,
             CONF_CONSUMPTION_SENSOR,
             CONF_EXPORT_SENSOR,
-            CONF_BATTERY_CHARGE_SENSOR,
             CONF_BATTERY_DISCHARGE_SENSOR,
             CONF_GRID_IMPORT_SENSOR,
         ],
@@ -73,7 +74,6 @@ TEMPLATE_DEFAULTS: Final = {
         "unit": "kWh",
         "currency_unit": "€",
         "fields": [
-            CONF_PRODUCTION_SENSOR,
             CONF_CONSUMPTION_SENSOR,
             CONF_EXPORT_SENSOR,
             CONF_GRID_IMPORT_SENSOR,
