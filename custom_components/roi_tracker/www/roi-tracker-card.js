@@ -1,14 +1,16 @@
 /**
- * ROI Tracker Card  v0.2.6
+ * ROI Tracker Card  v0.2.9
  *
  * Konfiguration:
  *   type: custom:roi-tracker-card
  *   device: <device_id>
  *   title: "Meine PV-Anlage"     # optional
  *   language: de | en            # optional, Standard: HA-Sprache
- *   show_chart: true             # Monatsbalken (Standard: true)
+ *   show_donut: true             # Amortisations-Donut (Standard: true)
+ *   show_tiles: true             # Kennzahlen-Kacheln (Standard: true)
  *   show_breakdown: true         # Aufschlüsselung (Standard: true)
  *   show_energy: true            # kWh-Statistiken (Standard: true)
+ *   show_chart: true             # Monatsbalken (Standard: true)
  */
 
 const TXT = {
@@ -82,6 +84,10 @@ const KEYS = [
   "total_consumption_kwh", "total_export_kwh", "total_battery_discharge_kwh",
 ];
 
+// Längste Schlüssel zuerst, damit z.B. "battery_savings" nicht fälschlich
+// dem Schlüssel "savings" zugeordnet wird (unique_id endet auf beide).
+const KEYS_BY_LENGTH = [...KEYS].sort((a, b) => b.length - a.length);
+
 // ─── Hauptkarte ───────────────────────────────────────────────────────────────
 
 class RoiTrackerCard extends HTMLElement {
@@ -135,8 +141,8 @@ class RoiTrackerCard extends HTMLElement {
       for (const [entityId, ent] of Object.entries(entities)) {
         if (ent.device_id !== deviceId || ent.platform !== "roi_tracker") continue;
         const uid = ent.unique_id || entityId;
-        for (const k of KEYS) {
-          if (uid.endsWith(k)) map[k] = entityId;
+        for (const k of KEYS_BY_LENGTH) {
+          if (uid.endsWith("_" + k)) { map[k] = entityId; break; }
         }
       }
     }
@@ -352,6 +358,8 @@ class RoiTrackerCard extends HTMLElement {
     const t = TXT[this._lang()];
     const ent = this._resolveEntities();
     const title = this._config.title || "ROI Tracker";
+    const showDonut = this._config.show_donut !== false;
+    const showTiles = this._config.show_tiles !== false;
     const showChart = this._config.show_chart !== false;
     const showBreakdown = this._config.show_breakdown !== false;
     const showEnergy = this._config.show_energy !== false;
@@ -372,8 +380,12 @@ class RoiTrackerCard extends HTMLElement {
     const roi = this._value(ent.roi_percent);
     const breakevenDays = this._value(ent.breakeven_days);
     const selfCons = this._value(ent.self_sufficiency);
-    const daily = this._value(ent.daily_average);
-    const monthly = this._value(ent.monthly_estimate);
+    // Fallback auf Attribute des total_return-Sensors, falls die Sensoren
+    // (noch) keinen Wert liefern.
+    const daily = this._value(ent.daily_average)
+      ?? this._attr(ent.total_return, "daily_average");
+    const monthly = this._value(ent.monthly_estimate)
+      ?? this._attr(ent.total_return, "monthly_estimate");
     const gridCost = this._value(ent.grid_import_cost);
     const gridKwh = this._value(ent.grid_import_kwh);
     const consumKwh = this._value(ent.total_consumption_kwh);
@@ -414,7 +426,7 @@ class RoiTrackerCard extends HTMLElement {
         <div class="content">
 
           <div class="hero">
-            ${this._renderDonut(pct)}
+            ${showDonut ? this._renderDonut(pct) : ""}
             <div class="hero-text">
               <div class="hero-total">${this._fmt(total)}</div>
               <div class="hero-label">${t.total_return}</div>
@@ -426,7 +438,7 @@ class RoiTrackerCard extends HTMLElement {
             </div>
           </div>
 
-          <div class="tiles">${tiles}</div>
+          ${showTiles ? `<div class="tiles">${tiles}</div>` : ""}
 
           ${breakdownHtml ? `<div class="section">${breakdownHtml}</div>` : ""}
           ${energyHtml ? `<div class="section">${energyHtml}</div>` : ""}
@@ -503,6 +515,8 @@ class RoiTrackerCardEditor extends HTMLElement {
     super();
     this._config = {};
     this._hass = null;
+    this._built = false;
+    this._devSig = null;
   }
 
   setConfig(config) {
@@ -562,67 +576,84 @@ class RoiTrackerCardEditor extends HTMLElement {
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const root = this.shadowRoot;
 
+    const SECTIONS = [
+      ["show_donut", lang === "de" ? "Amortisations-Donut" : "Amortization donut"],
+      ["show_tiles", lang === "de" ? "Kennzahlen-Kacheln" : "Metric tiles"],
+      ["show_breakdown", lang === "de" ? "Rückfluss-Aufschlüsselung" : "Return breakdown"],
+      ["show_energy", lang === "de" ? "kWh-Statistiken" : "Energy stats (kWh)"],
+      ["show_chart", lang === "de" ? "Monatsbalken-Diagramm" : "Monthly chart"],
+    ];
+
+    // Grundgerüst nur einmal bauen – sonst verliert das Titel-Feld beim
+    // Tippen den Fokus (hass-Updates feuern alle paar Sekunden).
+    if (!this._built) {
+      this._built = true;
+      root.innerHTML = `
+        <style>
+          .form { display:flex; flex-direction:column; gap:14px; padding:8px; }
+          .row label { display:block; font-size:.85em; color:var(--secondary-text-color); margin-bottom:4px; }
+          select, input[type=text] {
+            width:100%; padding:9px; box-sizing:border-box; font-size:1em;
+            border:1px solid var(--divider-color,#ccc); border-radius:6px;
+            background:var(--card-background-color,#fff); color:var(--primary-text-color);
+          }
+          .hint { font-size:.8em; color:var(--warning-color,#ff9800); margin-top:4px; display:none; }
+          .group-label { font-size:.85em; font-weight:600; color:var(--secondary-text-color);
+            margin-bottom:2px; }
+          .row-check { display:flex; align-items:center; gap:10px; }
+          .row-check input { width:18px; height:18px; accent-color:var(--primary-color,#03a9f4); }
+          .row-check label { font-size:.9em; color:var(--primary-text-color); margin:0; cursor:pointer; }
+        </style>
+        <div class="form">
+          <div class="row">
+            <label>${lang === "de" ? "Anlage (ROI Tracker Gerät)" : "Asset (ROI Tracker device)"}</label>
+            <select id="device"></select>
+            <div class="hint" id="no-dev-hint">${lang === "de"
+              ? "Keine ROI-Tracker-Anlage gefunden – zuerst die Integration einrichten."
+              : "No ROI Tracker asset found – set up the integration first."}</div>
+          </div>
+          <div class="row">
+            <label>${lang === "de" ? "Titel (optional)" : "Title (optional)"}</label>
+            <input id="title" type="text" placeholder="ROI Tracker"/>
+          </div>
+          <div class="group-label">${lang === "de" ? "Anzeigen:" : "Show:"}</div>
+          ${SECTIONS.map(([key, label]) => `
+            <div class="row-check">
+              <input id="chk-${key}" type="checkbox"/>
+              <label for="chk-${key}">${label}</label>
+            </div>`).join("")}
+        </div>`;
+
+      root.getElementById("device").addEventListener("change", (e) =>
+        this._emit({ ...this._config, device: e.target.value }));
+      root.getElementById("title").addEventListener("input", (e) =>
+        this._emit({ ...this._config, title: e.target.value }));
+      for (const [key] of SECTIONS) {
+        root.getElementById(`chk-${key}`).addEventListener("change", (e) =>
+          this._emit({ ...this._config, [key]: e.target.checked }));
+      }
+    }
+
+    // Geräteliste aktualisieren (Registry kann nach dem ersten Render laden)
     const devices = this._roiDevices();
-    const noDevices = lang === "de"
-      ? "Keine ROI-Tracker-Anlage gefunden – zuerst die Integration einrichten."
-      : "No ROI Tracker asset found – set up the integration first.";
+    const sel = root.getElementById("device");
+    const sig = devices.map((d) => d.id + d.name).join("|");
+    if (sig !== this._devSig) {
+      this._devSig = sig;
+      sel.innerHTML =
+        `<option value="">${lang === "de" ? "— Anlage wählen —" : "— Select asset —"}</option>` +
+        devices.map((d) => `<option value="${d.id}">${d.name}</option>`).join("");
+    }
+    sel.value = cfg.device || "";
+    root.getElementById("no-dev-hint").style.display = devices.length ? "none" : "block";
 
-    const options = [`<option value="">${lang === "de" ? "— Anlage wählen —" : "— Select asset —"}</option>`]
-      .concat(devices.map((d) =>
-        `<option value="${d.id}" ${cfg.device === d.id ? "selected" : ""}>${d.name}</option>`
-      )).join("");
+    // Titel nur setzen, wenn das Feld nicht gerade fokussiert ist
+    const titleInput = root.getElementById("title");
+    if (root.activeElement !== titleInput) titleInput.value = cfg.title || "";
 
-    const checked = (key) => (cfg[key] !== false ? "checked" : "");
-
-    root.innerHTML = `
-      <style>
-        .form { display:flex; flex-direction:column; gap:14px; padding:8px; }
-        .row label { display:block; font-size:.85em; color:var(--secondary-text-color); margin-bottom:4px; }
-        select, input[type=text] {
-          width:100%; padding:9px; box-sizing:border-box; font-size:1em;
-          border:1px solid var(--divider-color,#ccc); border-radius:6px;
-          background:var(--card-background-color,#fff); color:var(--primary-text-color);
-        }
-        .hint { font-size:.8em; color:var(--warning-color,#ff9800); margin-top:4px; }
-        .row-check { display:flex; align-items:center; gap:10px; }
-        .row-check input { width:18px; height:18px; }
-        .row-check label { font-size:.9em; color:var(--primary-text-color); margin:0; }
-      </style>
-      <div class="form">
-        <div class="row">
-          <label>${lang === "de" ? "Anlage (ROI Tracker Gerät)" : "Asset (ROI Tracker device)"}</label>
-          <select id="device">${options}</select>
-          ${devices.length === 0 ? `<div class="hint">${noDevices}</div>` : ""}
-        </div>
-        <div class="row">
-          <label>${lang === "de" ? "Titel (optional)" : "Title (optional)"}</label>
-          <input id="title" type="text" value="${(cfg.title || "").replace(/"/g, "&quot;")}"
-            placeholder="ROI Tracker"/>
-        </div>
-        <div class="row-check">
-          <input id="chk-chart" type="checkbox" ${checked("show_chart")}/>
-          <label for="chk-chart">${lang === "de" ? "Monatsbalken anzeigen" : "Show monthly chart"}</label>
-        </div>
-        <div class="row-check">
-          <input id="chk-breakdown" type="checkbox" ${checked("show_breakdown")}/>
-          <label for="chk-breakdown">${lang === "de" ? "Aufschlüsselung anzeigen" : "Show breakdown"}</label>
-        </div>
-        <div class="row-check">
-          <input id="chk-energy" type="checkbox" ${checked("show_energy")}/>
-          <label for="chk-energy">${lang === "de" ? "kWh-Statistiken anzeigen" : "Show energy stats"}</label>
-        </div>
-      </div>`;
-
-    root.getElementById("device").addEventListener("change", (e) =>
-      this._emit({ ...this._config, device: e.target.value }));
-    root.getElementById("title").addEventListener("input", (e) =>
-      this._emit({ ...this._config, title: e.target.value }));
-    root.getElementById("chk-chart").addEventListener("change", (e) =>
-      this._emit({ ...this._config, show_chart: e.target.checked }));
-    root.getElementById("chk-breakdown").addEventListener("change", (e) =>
-      this._emit({ ...this._config, show_breakdown: e.target.checked }));
-    root.getElementById("chk-energy").addEventListener("change", (e) =>
-      this._emit({ ...this._config, show_energy: e.target.checked }));
+    for (const [key] of SECTIONS) {
+      root.getElementById(`chk-${key}`).checked = cfg[key] !== false;
+    }
   }
 
   _emit(config) {
@@ -648,7 +679,7 @@ window.customCards.push({
 });
 
 console.info(
-  "%c ROI-TRACKER-CARD %c v0.2.7 ",
+  "%c ROI-TRACKER-CARD %c v0.2.9 ",
   "color:#fff;background:#03a9f4;font-weight:700;",
   "color:#03a9f4;background:#fff;font-weight:700;"
 );
