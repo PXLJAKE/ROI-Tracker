@@ -347,12 +347,13 @@ class RoiTrackerCard extends HTMLElement {
 
   _renderEnergy(consumKwh, exportKwh, batteryKwh, gridKwh, gridCost) {
     const t = TXT[this._lang()];
+    const on = (k) => this._config[k] !== false;
     const rows = [
-      [t.consumption_kwh, this._fmtKwh(consumKwh), "dot-blue"],
-      [t.export_kwh, this._fmtKwh(exportKwh), "dot-green"],
-      [t.battery_kwh, this._fmtKwh(batteryKwh), "dot-orange"],
-      [t.grid_import, this._fmtKwh(gridKwh), "dot-grey"],
-      gridCost != null ? [t.grid_cost, this._fmt(gridCost, 0), "dot-grey"] : null,
+      on("energy_consumption") ? [t.consumption_kwh, this._fmtKwh(consumKwh), "dot-blue"] : null,
+      on("energy_export") ? [t.export_kwh, this._fmtKwh(exportKwh), "dot-green"] : null,
+      on("energy_battery") ? [t.battery_kwh, this._fmtKwh(batteryKwh), "dot-orange"] : null,
+      on("energy_grid") ? [t.grid_import, this._fmtKwh(gridKwh), "dot-grey"] : null,
+      on("energy_grid_cost") && gridCost != null ? [t.grid_cost, this._fmt(gridCost, 0), "dot-grey"] : null,
     ].filter(r => r && r[1]);
 
     if (!rows.length) return "";
@@ -461,6 +462,7 @@ class RoiTrackerCard extends HTMLElement {
     const ent = this._resolveEntities();
     // Leerer Titel = kein Header → kompaktere Karte
     const title = (this._config.title || "").trim();
+    const showHero = this._config.show_hero !== false;
     const showDonut = this._config.show_donut !== false;
     const showTiles = this._config.show_tiles !== false;
     const showToday = this._config.show_today !== false;
@@ -532,6 +534,7 @@ class RoiTrackerCard extends HTMLElement {
         ${headerHtml}
         <div class="content${title ? "" : " no-title"}">
 
+          ${showHero ? `
           <div class="hero">
             ${showDonut ? this._renderDonut(pct) : ""}
             <div class="hero-text">
@@ -543,7 +546,7 @@ class RoiTrackerCard extends HTMLElement {
               </div>
               <div class="amort-track"><div class="amort-fill" style="width:${Math.min(pct, 100)}%"></div></div>
             </div>
-          </div>
+          </div>` : ""}
 
           ${showTiles && tileData.length ? `<div class="tiles">${tiles}</div>` : ""}
 
@@ -687,12 +690,16 @@ class RoiTrackerCardEditor extends HTMLElement {
     const root = this.shadowRoot;
 
     const SECTIONS = [
-      ["show_donut", lang === "de" ? "Amortisations-Donut" : "Amortization donut"],
+      ["show_hero", lang === "de" ? "Oberer Block (Rückfluss & Amortisation)" : "Top block (return & amortization)"],
       ["show_tiles", lang === "de" ? "Kennzahlen-Kacheln" : "Metric tiles"],
       ["show_today", lang === "de" ? "Heute (Ersparnis & Einspeisung)" : "Today (savings & feed-in)"],
       ["show_breakdown", lang === "de" ? "Rückfluss-Aufschlüsselung" : "Return breakdown"],
       ["show_energy", lang === "de" ? "kWh-Statistiken" : "Energy stats (kWh)"],
       ["show_chart", lang === "de" ? "Monatsbalken-Diagramm" : "Monthly chart"],
+    ];
+    // Donut – eingerückt unter "Oberer Block"
+    const DONUT = [
+      ["show_donut", lang === "de" ? "Amortisations-Donut" : "Amortization donut"],
     ];
     // Einzelne Kacheln – eingerückt unter "Kennzahlen-Kacheln"
     const TILES = [
@@ -703,7 +710,21 @@ class RoiTrackerCardEditor extends HTMLElement {
       ["tile_roi", "ROI"],
       ["tile_self", lang === "de" ? "Eigenverbrauch-%" : "Self-cons. %"],
     ];
-    const ALL_TOGGLES = [...SECTIONS, ...TILES];
+    // Einzelne kWh-Zeilen – eingerückt unter "kWh-Statistiken"
+    const ENERGY_ROWS = [
+      ["energy_consumption", lang === "de" ? "Eigenverbrauch (kWh)" : "Self-consumption (kWh)"],
+      ["energy_export", lang === "de" ? "Einspeisung (kWh)" : "Export (kWh)"],
+      ["energy_battery", lang === "de" ? "Batterie (kWh)" : "Battery (kWh)"],
+      ["energy_grid", lang === "de" ? "Netzbezug (kWh)" : "Grid import (kWh)"],
+      ["energy_grid_cost", lang === "de" ? "Netzbezug-Kosten (€)" : "Grid import cost (€)"],
+    ];
+    // Welche Sektion welche eingerückten Unter-Schalter hat
+    const CHILDREN = {
+      show_hero: DONUT,
+      show_tiles: TILES,
+      show_energy: ENERGY_ROWS,
+    };
+    const ALL_TOGGLES = [...SECTIONS, ...DONUT, ...TILES, ...ENERGY_ROWS];
 
     // Grundgerüst nur einmal bauen – sonst verliert das Titel-Feld beim
     // Tippen den Fokus (hass-Updates feuern alle paar Sekunden).
@@ -747,11 +768,12 @@ class RoiTrackerCardEditor extends HTMLElement {
               <input id="chk-${key}" type="checkbox"/>
               <label for="chk-${key}">${label}</label>
             </div>`;
-            if (key !== "show_tiles") return row;
-            return row + TILES.map(([tKey, tLabel]) => `
+            const kids = CHILDREN[key];
+            if (!kids) return row;
+            return row + kids.map(([cKey, cLabel]) => `
             <div class="row-check indent">
-              <input id="chk-${tKey}" type="checkbox"/>
-              <label for="chk-${tKey}">${tLabel}</label>
+              <input id="chk-${cKey}" type="checkbox"/>
+              <label for="chk-${cKey}">${cLabel}</label>
             </div>`).join("");
           }).join("")}
         </div>`;
@@ -811,7 +833,7 @@ window.customCards.push({
 });
 
 console.info(
-  "%c ROI-TRACKER-CARD %c v0.3.1 ",
+  "%c ROI-TRACKER-CARD %c v0.3.2 ",
   "color:#fff;background:#03a9f4;font-weight:700;",
   "color:#03a9f4;background:#fff;font-weight:700;"
 );

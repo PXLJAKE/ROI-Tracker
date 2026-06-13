@@ -118,7 +118,8 @@ type: custom:roi-tracker-card
 device: <Geräte-ID der Anlage>
 title: Meine PV-Anlage    # optional – weglassen = kein Titel, kompaktere Karte
 # language: de            # optional, sonst HA-Sprache
-# show_donut: true        # Amortisations-Donut
+# show_hero: true         # Oberer Block (Gesamtrückfluss & Amortisation)
+# show_donut: true        #   Amortisations-Donut (Teil des oberen Blocks)
 # show_tiles: true        # Kennzahlen-Kacheln (Gruppe)
 # tile_daily: true        #   Kachel: Ø täglich
 # tile_monthly: true      #   Kachel: Ø monatlich
@@ -128,7 +129,12 @@ title: Meine PV-Anlage    # optional – weglassen = kein Titel, kompaktere Kart
 # tile_self: true         #   Kachel: Eigenverbrauch-%
 # show_today: true        # Heute: Ersparnis & Einspeisung des Tages
 # show_breakdown: true    # Rückfluss-Aufschlüsselung
-# show_energy: true       # kWh-Statistiken (inkl. Netzbezug)
+# show_energy: true       # kWh-Statistiken (Gruppe)
+# energy_consumption: true #   Zeile: Eigenverbrauch (kWh)
+# energy_export: true     #   Zeile: Einspeisung (kWh)
+# energy_battery: true    #   Zeile: Batterie (kWh)
+# energy_grid: true       #   Zeile: Netzbezug (kWh)
+# energy_grid_cost: true  #   Zeile: Netzbezug-Kosten (€)
 # show_chart: true        # Monatsbalken-Histogramm
 ```
 
