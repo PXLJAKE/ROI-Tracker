@@ -34,7 +34,6 @@ from .const import (
     CONF_PRICE_FIXED,
     CONF_PRICE_MODE,
     CONF_PRICE_SENSOR,
-    CONF_PRODUCTION_SENSOR,
     CONF_REWARD_FIXED,
     CONF_REWARD_MODE,
     CONF_REWARD_SENSOR,
@@ -122,8 +121,6 @@ def _schema_setup(template: str, defaults: dict[str, Any]) -> vol.Schema:
         _opt(CONF_START_DATE, defaults): selector.DateSelector(),
     }
 
-    if CONF_PRODUCTION_SENSOR in fields:
-        schema[_opt(CONF_PRODUCTION_SENSOR, defaults)] = _ENERGY_SENSOR
     if CONF_CONSUMPTION_SENSOR in fields:
         schema[_opt(CONF_CONSUMPTION_SENSOR, defaults)] = _ENERGY_SENSOR
     if CONF_EXPORT_SENSOR in fields:

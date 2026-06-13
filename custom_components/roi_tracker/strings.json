@@ -15,23 +15,24 @@
           "name": "Name der Anlage",
           "investment": "Anschaffungskosten",
           "start_date": "Startdatum (optional, auch rückwirkend)",
-          "production_sensor": "PV-Produktion (kWh, kumuliert)",
-          "consumption_sensor": "Eigenverbrauch aus PV/Batterie (kWh, kumuliert)",
+          "consumption_sensor": "PV-Eigenverbrauch (kWh, kumuliert)",
           "export_sensor": "Einspeisung ins Netz (kWh, kumuliert)",
-          "battery_discharge_sensor": "Aus Batterie entnommen (kWh, kumuliert)",
+          "battery_discharge_sensor": "Aus Batterie entnommen (kWh, kumuliert) – optional",
           "grid_import_sensor": "Netzbezug (kWh, kumuliert) – optional",
           "price_mode": "Woher kommt dein Strompreis (Bezug)?",
+          "baseline_rate": "Vergleichskosten der Alt-Lösung (€/kWh)",
           "reward_mode": "Woher kommt deine Einspeisevergütung?",
           "sensor_reset_daily": "Sensoren setzen täglich/monatlich zurück"
         },
         "data_description": {
           "investment": "Einmalige Investitionssumme in €, die sich amortisieren soll (z. B. 20000).",
           "start_date": "Optional ein Datum in der Vergangenheit. Die Berechnung startet dann rückwirkend ab diesem Tag aus der gespeicherten Sensor-Historie.",
-          "consumption_sensor": "Der Eigenverbrauch in kWh – das ist der Strom, den du direkt aus der PV-Anlage oder der Batterie nutzt. NICHT der Netzbezug. Aus dieser Menge × Strompreis ergibt sich deine Ersparnis.",
+          "consumption_sensor": "Direkt aus der PV-Anlage selbst genutzter Strom in kWh – NICHT der Netzbezug. Wichtig: Wenn du unten einen Batterie-Sensor angibst, darf dieser Wert die Batterie-Entnahme NICHT enthalten, sonst wird sie doppelt gezählt. Menge × Strompreis = deine Ersparnis.",
           "export_sensor": "Die ins Netz eingespeiste Energie in kWh. Menge × Einspeisevergütung = dein Einspeiseertrag.",
-          "battery_discharge_sensor": "Aus der Batterie entnommene Energie in kWh. Wird wie Eigenverbrauch als Ersparnis gewertet.",
+          "battery_discharge_sensor": "Aus der Batterie entnommene Energie in kWh. Wird wie Eigenverbrauch als Ersparnis gewertet und separat ausgewiesen. Weglassen, wenn dein Eigenverbrauchs-Sensor die Batterie bereits enthält.",
           "grid_import_sensor": "Optional: kumulierter Netzbezug in kWh (z. B. Tibber oder Smartmeter). Wird NICHT vom ROI abgezogen – dient nur der transparenten Anzeige, wie viel du noch aus dem Netz beziehst.",
           "price_mode": "Bestimmt, wie der Geldwert deines Eigenverbrauchs berechnet wird.",
+          "baseline_rate": "Was dich eine kWh mit der alten Lösung gekostet hätte. Die Ersparnis ergibt sich aus der Differenz zum aktuellen Preis.",
           "sensor_reset_daily": "Aktivieren wenn deine Sensoren nicht dauerhaft kumulieren, sondern täglich (z. B. Tagesertrag) oder monatlich zurücksetzen. Der Integrator zählt dann korrekt weiter, auch über den Reset hinaus."
         }
       },
@@ -67,17 +68,19 @@
           "name": "Name der Anlage",
           "investment": "Anschaffungskosten",
           "start_date": "Startdatum (optional, auch rückwirkend)",
-          "production_sensor": "PV-Produktion (kWh, kumuliert)",
-          "consumption_sensor": "Eigenverbrauch aus PV/Batterie (kWh, kumuliert)",
+          "consumption_sensor": "PV-Eigenverbrauch (kWh, kumuliert)",
           "export_sensor": "Einspeisung ins Netz (kWh, kumuliert)",
-          "battery_discharge_sensor": "Aus Batterie entnommen (kWh, kumuliert)",
+          "battery_discharge_sensor": "Aus Batterie entnommen (kWh, kumuliert) – optional",
           "grid_import_sensor": "Netzbezug (kWh, kumuliert) – optional",
           "price_mode": "Woher kommt dein Strompreis (Bezug)?",
-          "reward_mode": "Woher kommt deine Einspeisevergütung?"
+          "baseline_rate": "Vergleichskosten der Alt-Lösung (€/kWh)",
+          "reward_mode": "Woher kommt deine Einspeisevergütung?",
+          "sensor_reset_daily": "Sensoren setzen täglich/monatlich zurück"
         },
         "data_description": {
-          "consumption_sensor": "Eigenverbrauch aus PV/Batterie – NICHT der Netzbezug.",
-          "grid_import_sensor": "Optional: kumulierter Netzbezug (nur für Anzeige, nicht ROI-wirksam)."
+          "consumption_sensor": "Direkter PV-Eigenverbrauch – NICHT der Netzbezug. Batterie-Entnahme nicht mitzählen, wenn ein Batterie-Sensor angegeben ist.",
+          "grid_import_sensor": "Optional: kumulierter Netzbezug (nur für Anzeige, nicht ROI-wirksam).",
+          "sensor_reset_daily": "Aktivieren wenn Sensoren täglich oder monatlich zurücksetzen."
         }
       },
       "sources": {

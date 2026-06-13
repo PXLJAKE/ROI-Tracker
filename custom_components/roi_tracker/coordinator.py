@@ -25,7 +25,6 @@ from .const import (
     CONF_PRICE_FIXED,
     CONF_PRICE_MODE,
     CONF_PRICE_SENSOR,
-    CONF_PRODUCTION_SENSOR,
     CONF_REWARD_FIXED,
     CONF_REWARD_MODE,
     CONF_REWARD_SENSOR,
@@ -400,7 +399,6 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
         consumption = self._read_number(cfg.get(CONF_CONSUMPTION_SENSOR))
         export = self._read_number(cfg.get(CONF_EXPORT_SENSOR))
         battery_discharge = self._read_number(cfg.get(CONF_BATTERY_DISCHARGE_SENSOR))
-        production = self._read_number(cfg.get(CONF_PRODUCTION_SENSOR))
         grid_import = self._read_number(cfg.get(CONF_GRID_IMPORT_SENSOR))
 
         reset_daily: bool = bool(cfg.get(CONF_SENSOR_RESET_DAILY, False))
@@ -445,8 +443,6 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
         )
 
         result.attributes["template"] = cfg.get(CONF_TEMPLATE, "custom")
-        if production is not None:
-            result.attributes["total_production"] = round(production, 3)
 
         await self._async_save_state()
         return result
