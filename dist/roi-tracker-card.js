@@ -1,5 +1,5 @@
 /**
- * ROI Tracker Card  v0.3.0
+ * ROI Tracker Card  v0.3.1
  *
  * Konfiguration:
  *   type: custom:roi-tracker-card
@@ -263,12 +263,16 @@ class RoiTrackerCard extends HTMLElement {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
 
+    // Stunden-Buckets seit Mitternacht summieren statt period:"day": die
+    // Tages-Aggregation entsteht erst aus fertig kompilierten Stunden und ist
+    // für den laufenden Tag oft noch leer. Stunden-Buckets enthalten dagegen
+    // zuverlässig auch die aktuelle Teilstunde (aus Kurzzeit-Statistik).
     this._hass.callWS({
       type: "recorder/statistics_during_period",
       start_time: start.toISOString(),
       end_time: new Date().toISOString(),
       statistic_ids: ids,
-      period: "day",
+      period: "hour",
       units: { currency: "EUR" },
       types: ["change"],
     }).then(result => {
@@ -369,14 +373,22 @@ class RoiTrackerCard extends HTMLElement {
 
   _renderToday() {
     const t = TXT[this._lang()];
+    // Sichtbare Lade-/Leer-Hinweise, damit die Sektion nie stumm verschwindet.
+    if (this._todayFetching && !this._todayCache) {
+      return `<div class="section-title">${t.today_title}</div>
+              <div class="chart-msg">${t.loading}</div>`;
+    }
     const data = this._todayCache;
-    if (!data) return "";  // erscheint, sobald die Statistik geladen ist
+    if (!data) return "";  // noch kein Fetch gestartet (z. B. keine Entitäten)
     const rows = [
       ["savings", t.savings, "dot-blue"],
       ["battery_savings", t.battery_savings, "dot-orange"],
       ["revenue", t.revenue, "dot-green"],
     ].filter(([key]) => data[key] != null);
-    if (!rows.length) return "";
+    if (!rows.length) {
+      return `<div class="section-title">${t.today_title}</div>
+              <div class="chart-msg">${t.no_data}</div>`;
+    }
 
     const sum = rows.reduce((a, [key]) => a + data[key], 0);
     return `
@@ -799,7 +811,7 @@ window.customCards.push({
 });
 
 console.info(
-  "%c ROI-TRACKER-CARD %c v0.3.0 ",
+  "%c ROI-TRACKER-CARD %c v0.3.1 ",
   "color:#fff;background:#03a9f4;font-weight:700;",
   "color:#03a9f4;background:#fff;font-weight:700;"
 );
