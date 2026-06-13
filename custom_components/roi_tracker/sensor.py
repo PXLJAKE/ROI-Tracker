@@ -126,23 +126,23 @@ SENSOR_DESCRIPTIONS: tuple[RoiSensorDescription, ...] = (
         icon="mdi:home-lightning-bolt",
         value_fn=lambda r: r.self_sufficiency_percent,
     ),
+    # Durchschnitts-/Prognosewerte: bewusst OHNE device_class monetary –
+    # monetary erlaubt nur state_class total, measurement wäre ungültig.
     RoiSensorDescription(
         key=SENSOR_DAILY_AVERAGE,
         translation_key=SENSOR_DAILY_AVERAGE,
         native_unit_of_measurement=CURRENCY,
-        device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:calendar-today",
-        value_fn=lambda r: r.daily_average if r.daily_average else None,
+        value_fn=lambda r: r.daily_average,
     ),
     RoiSensorDescription(
         key=SENSOR_MONTHLY_ESTIMATE,
         translation_key=SENSOR_MONTHLY_ESTIMATE,
         native_unit_of_measurement=CURRENCY,
-        device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:calendar-month",
-        value_fn=lambda r: r.monthly_estimate if r.monthly_estimate else None,
+        value_fn=lambda r: r.monthly_estimate,
     ),
     RoiSensorDescription(
         key=SENSOR_GRID_IMPORT_COST,
