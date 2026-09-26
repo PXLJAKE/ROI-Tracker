@@ -1,9 +1,24 @@
-"""DataUpdateCoordinator: liest Quell-Sensoren, rechnet ROI, persistiert Zustand."""
+"""DataUpdateCoordinator: rechnet stündlich aus der HA-Langzeitstatistik.
+
+Ablauf je Update (alle 5 Minuten):
+  1. Alle fertig kompilierten Stunden seit ``processed_until`` aus der
+     stündlichen Statistik laden, mit dem Strompreis der jeweiligen Stunde
+     bewerten, auf Tage aufsummieren und speichern.
+  2. Die laufende, noch nicht kompilierte Zeit live aus der
+     5-Minuten-Statistik schätzen (nur Anzeige, wird nicht gespeichert).
+  3. Kennzahlen (ROI, Amortisation, Hochrechnung) aus den Tageswerten ableiten.
+
+Ändert sich die Konfiguration (Startdatum, Sensoren, Preise), wird automatisch
+komplett neu ab dem Startdatum gerechnet.
+"""
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import json
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -12,51 +27,55 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
 from . import calculator
-from .calculator import RoiResult, RoiState
-from .history import async_get_sensor_value_at
+from .calculator import HOUR, Amounts, floor_hour
 from .const import (
-    CONF_BASELINE_RATE,
+    CALC_KEYS,
+    CONF_BATTERY_CHARGE_SENSOR,
     CONF_BATTERY_DISCHARGE_SENSOR,
     CONF_CONSUMPTION_SENSOR,
-    CONF_COST_SENSOR,
     CONF_EXPORT_SENSOR,
+    CONF_FEED_IN_TARIFF,
     CONF_GRID_IMPORT_SENSOR,
     CONF_INVESTMENT,
+    CONF_MODE,
     CONF_PRICE_FIXED,
-    CONF_PRICE_MODE,
     CONF_PRICE_SENSOR,
-    CONF_REWARD_FIXED,
-    CONF_REWARD_MODE,
-    CONF_REWARD_SENSOR,
-    CONF_SENSOR_RESET_DAILY,
+    CONF_PRODUCTION_SENSOR,
     CONF_START_DATE,
-    CONF_TEMPLATE,
     DEFAULT_UPDATE_INTERVAL_MINUTES,
     DOMAIN,
-    PRICE_MODE_COST_SENSOR,
-    PRICE_MODE_FIXED,
-    PRICE_MODE_SENSOR,
+    LEGACY_STORAGE_KEY,
+    MODE_DIRECT,
+    MODE_HOUSE,
+    MODE_PV,
     STORAGE_KEY,
     STORAGE_VERSION,
 )
+from .history import async_get_state_points, async_get_statistics
 
 _LOGGER = logging.getLogger(__name__)
 
+# Stunden-Statistik wird von HA kurz nach Stundenende kompiliert.
+COMPILE_DELAY = timedelta(minutes=15)
+# Fehlen Zeilen, die älter als das sind, kommen sie nicht mehr.
+GIVE_UP_AFTER = timedelta(hours=3)
+CHUNK = timedelta(days=31)
+# Zustands-Historie (für Preis-Sensoren ohne Statistik) reicht so weit zurück.
+HISTORY_WINDOW = timedelta(days=14)
+LIVE_MAX = timedelta(hours=4)
 
-def _average(values: list[float]) -> float | None:
-    """Gibt den Durchschnitt einer Liste zurück, oder None wenn leer."""
-    return sum(values) / len(values) if values else None
 
-
-def _nearest_price(price_by_start: dict, ts) -> float | None:
-    """Fallback-Preis wenn kein exakter Treffer: Gesamtdurchschnitt."""
-    if not price_by_start:
+def _num(value) -> float | None:
+    if value in (None, ""):
         return None
-    return _average(list(price_by_start.values()))
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
-class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
-    """Koordiniert das periodische Aktualisieren eines ROI-Rechners."""
+class RoiTrackerCoordinator(DataUpdateCoordinator[dict]):
+    """Rechnet eine Anlage aus der Recorder-Statistik."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         super().__init__(
@@ -69,385 +88,275 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[RoiResult]):
         self._store: Store = Store(
             hass, STORAGE_VERSION, STORAGE_KEY.format(entry_id=entry.entry_id)
         )
-        self._state: RoiState = RoiState()
-        self._override_start_date: str | None = None
+        self._lock = asyncio.Lock()
+        self.days: dict[str, dict] = {}
+        self.live: Amounts | None = None
+        self._processed_until: datetime | None = None
+        self._last_price: float | None = None
+        self.missing_price_hours = 0
+
+    # ── Konfiguration ─────────────────────────────────────────────────────────
 
     @property
     def config(self) -> dict:
         return {**self.entry.data, **self.entry.options}
 
-    # ── Setup / Laden ─────────────────────────────────────────────────────────
+    def _get(self, key: str) -> str | None:
+        return self.config.get(key) or None
 
-    async def async_load_state(self) -> None:
-        """Zustand laden. Bei leerem Store rückwirkend aus Historie berechnen."""
-        stored = await self._store.async_load()
-        if stored:
-            self._state = RoiState.from_dict(stored)
-            return
+    @property
+    def investment(self) -> float:
+        return _num(self.config.get(CONF_INVESTMENT)) or 0.0
 
-        self._state = RoiState()
+    @property
+    def feed_in(self) -> float:
+        return _num(self.config.get(CONF_FEED_IN_TARIFF)) or 0.0
 
-        # Statistik-Methode für alle Modi wenn Startdatum gesetzt (am genauesten)
-        seeded = False
-        if self.config.get(CONF_START_DATE):
-            seeded = await self.async_seed_from_statistics()
+    @property
+    def fixed_price(self) -> float | None:
+        return _num(self.config.get(CONF_PRICE_FIXED))
 
-        if not seeded:
-            await self.async_seed_from_history()
+    @property
+    def start_date(self) -> date:
+        raw = self.config.get(CONF_START_DATE)
+        parsed = dt_util.parse_date(str(raw)) if raw else None
+        return parsed or dt_util.now().date()
 
-        await self._async_save_state()
-
-    def _parse_start_date(self):
-        raw = self._override_start_date or self.config.get(CONF_START_DATE)
-        if not raw:
-            return None
-        try:
-            dt = dt_util.parse_datetime(raw)
-            if dt is None:
-                date = dt_util.parse_date(raw)
-                if date is None:
-                    return None
-                dt = datetime(date.year, date.month, date.day)
-            return dt_util.as_utc(
-                dt if dt.tzinfo else dt.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
-            )
-        except (ValueError, TypeError):
-            _LOGGER.warning("Ungültiges Startdatum: %s", raw)
-            return None
-
-    # ── Rückwirkende Berechnung ───────────────────────────────────────────────
-
-    async def async_seed_from_statistics(self) -> bool:
-        """Berechnet den ROI rückwirkend aus stündlichen HA-Statistiken.
-
-        Funktioniert für alle Preis-Modi:
-          - PRICE_MODE_SENSOR (Tibber): Δverbrauch × damaliger Preis pro Stunde
-          - PRICE_MODE_FIXED: Δverbrauch × fester Preis (summiert über alle Stunden)
-          - PRICE_MODE_COST_SENSOR: Δkosten-sensor direkt als Ersparnis
-
-        Funktioniert auch für täglich/monatlich rücksetzende Sensoren, da HA in
-        den Statistics den kumulierten ``change``-Wert korrekt fortführt.
-
-        Setzt last_* auf aktuelle Sensorwerte → künftige 5-Minuten-Updates laufen
-        nahtlos weiter.
-
-        Gibt True zurück wenn mindestens Verbrauchsdaten geladen werden konnten.
-        """
-        start = self._parse_start_date()
-        if start is None:
-            return False
-
-        cfg = self.config
-        price_mode = cfg.get(CONF_PRICE_MODE, PRICE_MODE_FIXED)
-
-        consumption_id = cfg.get(CONF_CONSUMPTION_SENSOR)
-        export_id = cfg.get(CONF_EXPORT_SENSOR)
-        battery_id = cfg.get(CONF_BATTERY_DISCHARGE_SENSOR)
-        grid_import_id = cfg.get(CONF_GRID_IMPORT_SENSOR)
-        price_id = cfg.get(CONF_PRICE_SENSOR) if price_mode == PRICE_MODE_SENSOR else None
-        cost_id = cfg.get(CONF_COST_SENSOR) if price_mode == PRICE_MODE_COST_SENSOR else None
-
-        raw_price_fixed = cfg.get(CONF_PRICE_FIXED)
-        price_fixed = float(raw_price_fixed) if raw_price_fixed not in (None, "") else None
-
-        raw_reward = cfg.get(CONF_REWARD_FIXED)
-        reward_per_unit = float(raw_reward) if raw_reward not in (None, "") else 0.0
-
-        # Mindestanforderung: Verbrauchssensor ODER Kosten-Sensor muss vorhanden sein
-        primary_id = consumption_id or cost_id
-        if not primary_id:
-            return False
-
-        statistic_ids = {
-            s for s in [consumption_id, price_id, cost_id, export_id, battery_id, grid_import_id]
-            if s
-        }
-        now = dt_util.utcnow()
-
-        try:
-            from homeassistant.components.recorder import get_instance
-            from homeassistant.components.recorder.statistics import statistics_during_period
-
-            instance = get_instance(self.hass)
-            stats = await instance.async_add_executor_job(
-                statistics_during_period,
-                self.hass,
-                start,
-                now,
-                statistic_ids,
-                "hour",
-                None,
-                {"mean", "change"},
-            )
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.warning(
-                "Stündliche Statistiken konnten nicht gelesen werden: %s. "
-                "Nutze einfache Baseline-Methode.", err
-            )
-            return False
-
-        # ── Preis-Dictionary für Sensor-Modus ────────────────────────────────
-        price_by_start: dict = {}
-        avg_price: float | None = None
-        if price_mode == PRICE_MODE_SENSOR and price_id:
-            for row in stats.get(price_id, []):
-                ts = row.get("start")
-                mean = row.get("mean")
-                if ts is not None and mean is not None:
-                    price_by_start[ts] = mean
-            if price_by_start:
-                avg_price = _average(list(price_by_start.values()))
-            else:
-                _LOGGER.info(
-                    "Keine Preisstatistiken für '%s' ab %s – nutze Baseline-Methode.",
-                    price_id, start.date(),
-                )
-                return False
-
-        def _price_for(ts) -> float | None:
-            """Gibt den Preis für einen Zeitstempel zurück (je nach Modus)."""
-            if price_mode == PRICE_MODE_FIXED:
-                return price_fixed
-            if price_mode == PRICE_MODE_SENSOR:
-                return price_by_start.get(ts, avg_price)
-            return None  # COST_SENSOR: kein Preis nötig
-
-        total_savings = 0.0
-        total_revenue = 0.0
-        total_battery = 0.0
-        total_grid_kwh = 0.0
-        total_grid_cost = 0.0
-        total_consumption = 0.0
-        total_export = 0.0
-        total_battery_discharge = 0.0
-        matched_hours = 0
-        fallback_hours = 0
-
-        # ── Eigenverbrauch-Ersparnis ──────────────────────────────────────────
-        if price_mode == PRICE_MODE_COST_SENSOR and cost_id:
-            # Kosten-Sensor direkt: Delta = Ersparnis in €
-            for row in stats.get(cost_id, []):
-                change = row.get("change") or 0.0
-                if change > 0:
-                    total_savings += change
-        elif consumption_id:
-            for row in stats.get(consumption_id, []):
-                change = row.get("change") or 0.0
-                if change <= 0:
-                    continue
-                ts = row.get("start")
-                price = _price_for(ts)
-                if price is not None:
-                    total_savings += change * price
-                    matched_hours += 1 if price != avg_price else 0
-                    fallback_hours += 1 if price == avg_price else 0
-                total_consumption += change
-
-        # ── Einspeise-Ertrag ──────────────────────────────────────────────────
-        if export_id:
-            for row in stats.get(export_id, []):
-                change = row.get("change") or 0.0
-                if change <= 0:
-                    continue
-                total_export += change
-                total_revenue += change * reward_per_unit
-
-        # ── Batterie-Ersparnis ────────────────────────────────────────────────
-        if battery_id:
-            for row in stats.get(battery_id, []):
-                change = row.get("change") or 0.0
-                if change <= 0:
-                    continue
-                ts = row.get("start")
-                price = _price_for(ts)
-                if price is not None:
-                    total_battery += change * price
-                total_battery_discharge += change
-
-        # ── Netzbezug (nur Anzeige) ────────────────────────────────────────────
-        if grid_import_id:
-            for row in stats.get(grid_import_id, []):
-                change = row.get("change") or 0.0
-                if change <= 0:
-                    continue
-                ts = row.get("start")
-                price = _price_for(ts)
-                total_grid_kwh += change
-                if price is not None:
-                    total_grid_cost += change * price
-
-        # Mindestens ein Sensor muss Daten geliefert haben
-        if not (total_consumption or total_savings or total_export):
-            _LOGGER.info(
-                "Keine Statistikdaten ab %s gefunden (Sensoren haben ggf. keine "
-                "state_class oder HA hat keine Langzeitstatistik gespeichert).",
-                start.date(),
-            )
-            return False
-
-        # ── Zustand setzen ────────────────────────────────────────────────────
-        self._state.first_update = start.isoformat()
-        self._state.savings = round(total_savings, 4)
-        self._state.revenue = round(total_revenue, 4)
-        self._state.battery_savings = round(total_battery, 4)
-        self._state.total_consumption = round(total_consumption, 4)
-        self._state.total_export = round(total_export, 4)
-        self._state.total_battery_discharge = round(total_battery_discharge, 4)
-        self._state.grid_import_kwh = round(total_grid_kwh, 4)
-        self._state.grid_import_cost = round(total_grid_cost, 4)
-
-        # last_* auf aktuelle Sensorwerte setzen (Delta-Basis für nächste 5-Min-Updates)
-        for conf_key, attr in [
-            (CONF_CONSUMPTION_SENSOR, "last_consumption"),
-            (CONF_EXPORT_SENSOR, "last_export"),
-            (CONF_BATTERY_DISCHARGE_SENSOR, "last_battery_discharge"),
-            (CONF_GRID_IMPORT_SENSOR, "last_grid_import"),
-            (CONF_COST_SENSOR, "last_cost_total"),
-        ]:
-            val = self._read_number(cfg.get(conf_key))
-            if val is not None:
-                setattr(self._state, attr, val)
-
-        _LOGGER.info(
-            "ROI rückwirkend berechnet (Modus: %s) | ab %s | "
-            "Ersparnis=%.2f€, Ertrag=%.2f€, Verbrauch=%.1fkWh",
-            price_mode, start.date(), total_savings, total_revenue, total_consumption,
+    def _roles(self) -> tuple[list[str], list[str], str | None]:
+        """(Plus-Sensoren, Minus-Sensoren, Einspeise-Sensor) für den Eigenverbrauch."""
+        mode = self.config.get(CONF_MODE, MODE_HOUSE)
+        g = self._get
+        if mode == MODE_PV:
+            plus = [g(CONF_PRODUCTION_SENSOR), g(CONF_BATTERY_DISCHARGE_SENSOR)]
+            minus = [g(CONF_EXPORT_SENSOR), g(CONF_BATTERY_CHARGE_SENSOR)]
+        elif mode == MODE_DIRECT:
+            plus = [g(CONF_CONSUMPTION_SENSOR), g(CONF_BATTERY_DISCHARGE_SENSOR)]
+            minus = []
+        else:
+            plus = [g(CONF_CONSUMPTION_SENSOR)]
+            minus = [g(CONF_GRID_IMPORT_SENSOR)]
+        return (
+            [s for s in plus if s],
+            [s for s in minus if s],
+            g(CONF_EXPORT_SENSOR),
         )
-        return True
 
-    async def async_seed_from_history(self) -> bool:
-        """Setzt die Basislinie auf die Zählerstände zum Startdatum (einfache Methode).
+    def _energy_ids(self) -> set[str]:
+        plus, minus, export = self._roles()
+        return {*plus, *minus, *([export] if export else [])}
 
-        Wird als Fallback verwendet wenn keine Preis-Statistiken verfügbar sind
-        oder kein dynamischer Preis-Sensor konfiguriert ist.
-        """
-        start = self._parse_start_date()
-        if start is None:
-            return False
-
+    def _config_hash(self) -> str:
         cfg = self.config
-        self._state.first_update = start.isoformat()
-        seeded = False
-
-        async def _seed(conf_key: str, attr: str) -> None:
-            nonlocal seeded
-            entity_id = cfg.get(conf_key)
-            value = await async_get_sensor_value_at(self.hass, entity_id, start)
-            if value is not None:
-                setattr(self._state, attr, value)
-                seeded = True
-                _LOGGER.debug(
-                    "Basislinie %s = %s (Stand %s) aus Historie gesetzt",
-                    entity_id, value, start.date(),
-                )
-
-        await _seed(CONF_CONSUMPTION_SENSOR, "last_consumption")
-        await _seed(CONF_EXPORT_SENSOR, "last_export")
-        await _seed(CONF_BATTERY_DISCHARGE_SENSOR, "last_battery_discharge")
-        await _seed(CONF_COST_SENSOR, "last_cost_total")
-        await _seed(CONF_REWARD_SENSOR, "last_reward_total")
-        await _seed(CONF_GRID_IMPORT_SENSOR, "last_grid_import")
-
-        if not seeded:
-            _LOGGER.info(
-                "Startdatum gesetzt, aber keine Historie gefunden. "
-                "Berechnung startet ab jetzt."
-            )
-        return seeded
-
-    async def async_recalculate_from(self, start_date: str | None = None) -> None:
-        """Setzt den Rechner zurück und berechnet rückwirkend neu.
-
-        Bei dynamischem Preis-Sensor: stündliche Statistiken.
-        Sonst: einfache Baseline-Methode.
-        """
-        self._state = RoiState()
-        await self._store.async_remove()
-        if start_date:
-            self._override_start_date = start_date
-
-        seeded = await self.async_seed_from_statistics()
-        if not seeded:
-            await self.async_seed_from_history()
-
-        await self._async_save_state()
-        await self.async_request_refresh()
+        payload = json.dumps({k: cfg.get(k) for k in CALC_KEYS}, sort_keys=True, default=str)
+        return hashlib.sha1(payload.encode()).hexdigest()
 
     # ── Persistenz ────────────────────────────────────────────────────────────
 
-    async def _async_save_state(self) -> None:
-        await self._store.async_save(self._state.to_dict())
+    async def async_load(self) -> None:
+        """Gespeicherte Tageswerte laden; bei geänderter Konfiguration verwerfen."""
+        stored = await self._store.async_load() or {}
+        if stored.get("config_hash") == self._config_hash():
+            self.days = stored.get("days") or {}
+            raw_until = stored.get("processed_until")
+            self._processed_until = dt_util.parse_datetime(raw_until) if raw_until else None
+            self._last_price = _num(stored.get("last_price"))
+            self.missing_price_hours = int(stored.get("missing_price_hours") or 0)
+        else:
+            if stored:
+                _LOGGER.info("%s: Konfiguration geändert – rechne neu", self.entry.title)
+            self._clear()
+        # Zustand der alten Version (inkrementelle Deltas) wird nicht mehr gebraucht.
+        await Store(
+            self.hass, 1, LEGACY_STORAGE_KEY.format(entry_id=self.entry.entry_id)
+        ).async_remove()
 
-    def _read_number(self, entity_id: str | None) -> float | None:
-        if not entity_id:
-            return None
-        state = self.hass.states.get(entity_id)
-        if state is None or state.state in ("unknown", "unavailable", "", None):
-            return None
-        try:
-            return float(state.state)
-        except (ValueError, TypeError):
-            _LOGGER.debug("Sensor %s liefert keinen Zahlenwert: %s", entity_id, state.state)
-            return None
+    def _clear(self) -> None:
+        self.days = {}
+        self._processed_until = None
+        self._last_price = None
+        self.missing_price_hours = 0
 
-    # ── Daten aktualisieren ───────────────────────────────────────────────────
-
-    async def _async_update_data(self) -> RoiResult:
-        cfg = self.config
-        investment = float(cfg.get(CONF_INVESTMENT, 0) or 0)
-
-        consumption = self._read_number(cfg.get(CONF_CONSUMPTION_SENSOR))
-        export = self._read_number(cfg.get(CONF_EXPORT_SENSOR))
-        battery_discharge = self._read_number(cfg.get(CONF_BATTERY_DISCHARGE_SENSOR))
-        grid_import = self._read_number(cfg.get(CONF_GRID_IMPORT_SENSOR))
-
-        reset_daily: bool = bool(cfg.get(CONF_SENSOR_RESET_DAILY, False))
-
-        raw_base = cfg.get(CONF_BASELINE_RATE)
-        baseline_rate = float(raw_base) if raw_base not in (None, "") else None
-
-        price_mode = cfg.get(CONF_PRICE_MODE, PRICE_MODE_FIXED)
-        price_per_unit: float | None = None
-        cost_total: float | None = None
-        if price_mode == PRICE_MODE_FIXED:
-            val = cfg.get(CONF_PRICE_FIXED)
-            price_per_unit = float(val) if val not in (None, "") else None
-        elif price_mode == PRICE_MODE_SENSOR:
-            price_per_unit = self._read_number(cfg.get(CONF_PRICE_SENSOR))
-        elif price_mode == PRICE_MODE_COST_SENSOR:
-            cost_total = self._read_number(cfg.get(CONF_COST_SENSOR))
-
-        reward_mode = cfg.get(CONF_REWARD_MODE, PRICE_MODE_FIXED)
-        reward_per_unit: float | None = None
-        reward_total: float | None = None
-        if reward_mode == PRICE_MODE_FIXED:
-            val = cfg.get(CONF_REWARD_FIXED)
-            reward_per_unit = float(val) if val not in (None, "") else None
-        elif reward_mode == PRICE_MODE_SENSOR:
-            reward_total = self._read_number(cfg.get(CONF_REWARD_SENSOR))
-
-        result = calculator.update(
-            self._state,
-            investment=investment,
-            now=dt_util.utcnow(),
-            consumption=consumption,
-            export=export,
-            battery_discharge=battery_discharge,
-            grid_import=grid_import,
-            price_per_unit=price_per_unit,
-            reward_per_unit=reward_per_unit,
-            cost_total=cost_total,
-            reward_total=reward_total,
-            baseline_rate=baseline_rate,
-            reset_daily=reset_daily,
+    async def _async_save(self) -> None:
+        await self._store.async_save(
+            {
+                "config_hash": self._config_hash(),
+                "processed_until": (
+                    self._processed_until.isoformat() if self._processed_until else None
+                ),
+                "last_price": self._last_price,
+                "missing_price_hours": self.missing_price_hours,
+                "days": self.days,
+            }
         )
 
-        result.attributes["template"] = cfg.get(CONF_TEMPLATE, "custom")
+    async def async_recalculate(self) -> None:
+        """Alles verwerfen und ab Startdatum neu aus der Statistik rechnen."""
+        async with self._lock:
+            self._clear()
+            await self._async_save()
+        await self.async_refresh()
 
-        await self._async_save_state()
-        return result
+    # ── Preise ────────────────────────────────────────────────────────────────
 
-    async def async_reset(self) -> None:
-        self._state = RoiState()
-        await self._store.async_remove()
-        await self.async_request_refresh()
+    def _price_unit_factor(self) -> float:
+        sensor = self._get(CONF_PRICE_SENSOR)
+        state = self.hass.states.get(sensor) if sensor else None
+        unit = state.attributes.get("unit_of_measurement") if state else None
+        return calculator.price_factor(unit)
+
+    def current_price(self) -> float | None:
+        sensor = self._get(CONF_PRICE_SENSOR)
+        if sensor:
+            state = self.hass.states.get(sensor)
+            value = _num(state.state) if state else None
+            if value is not None:
+                return value * self._price_unit_factor()
+            return self._last_price if self._last_price is not None else self.fixed_price
+        return self.fixed_price
+
+    async def _async_hour_prices(
+        self, hours: list[datetime], start: datetime, end: datetime
+    ) -> dict[datetime, float | None]:
+        sensor = self._get(CONF_PRICE_SENSOR)
+        if not sensor:
+            return {h: self.fixed_price for h in hours}
+
+        factor = self._price_unit_factor()
+        stats = await async_get_statistics(self.hass, start, end, {sensor}, "hour", "mean")
+        known = {h: v * factor for h, v in stats.get(sensor, {}).items()}
+
+        # Sensor ohne Langzeitstatistik: zeitgewichtet aus der Zustands-Historie
+        missing = [h for h in hours if h not in known]
+        if missing and end > dt_util.utcnow() - HISTORY_WINDOW:
+            points = await async_get_state_points(self.hass, sensor, start, end)
+            for h, v in calculator.time_weighted_hourly(points, start, end).items():
+                known.setdefault(h, v * factor)
+
+        self.missing_price_hours += sum(1 for h in hours if h not in known)
+        prices = calculator.fill_prices(hours, known, self._last_price, self.fixed_price)
+        last_known = [known[h] for h in sorted(known) if h < end]
+        if last_known:
+            self._last_price = last_known[-1]
+        return prices
+
+    # ── Stunden verarbeiten ──────────────────────────────────────────────────
+
+    async def _async_process_hours(self) -> None:
+        now = dt_util.utcnow()
+        target = floor_hour(now - COMPILE_DELAY)
+        cursor = self._processed_until or dt_util.as_utc(
+            dt_util.start_of_local_day(self.start_date)
+        )
+        changed = False
+        while cursor < target:
+            chunk_end = min(cursor + CHUNK, target)
+            done_until = await self._async_process_range(cursor, chunk_end, now)
+            if done_until is None or done_until <= cursor:
+                break
+            cursor = done_until
+            self._processed_until = cursor
+            changed = True
+        if changed:
+            await self._async_save()
+
+    async def _async_process_range(
+        self, start: datetime, end: datetime, now: datetime
+    ) -> datetime | None:
+        """Verarbeitet [start, end). Gibt zurück, bis wohin sicher verarbeitet wurde."""
+        plus, minus, export = self._roles()
+        ids = self._energy_ids()
+        if not ids:
+            return None
+        stats = await async_get_statistics(self.hass, start, end, ids, "hour", "change")
+
+        row_hours = {h for series in stats.values() for h in series}
+        if row_hours:
+            last_row_end = max(row_hours) + HOUR
+            # Noch nicht kompilierte Stunden am Ende: später erneut versuchen.
+            done_until = end if end <= now - GIVE_UP_AFTER else min(last_row_end, end)
+        else:
+            # Keine Daten: bei alten Zeiträumen weiter, bei jungen noch warten.
+            return end if end <= now - GIVE_UP_AFTER else None
+
+        hours = sorted(h for h in row_hours if h < done_until)
+        active = [
+            h for h in hours if any(stats.get(s, {}).get(h, 0.0) for s in ids)
+        ]
+        prices = await self._async_hour_prices(active, start, done_until) if active else {}
+
+        for hour in active:
+            changes = {s: stats.get(s, {}).get(hour, 0.0) for s in ids}
+            amounts = calculator.hour_amounts(
+                changes,
+                plus=plus,
+                minus=minus,
+                export_id=export,
+                price=prices.get(hour),
+                feed_in=self.feed_in,
+            )
+            day_key = dt_util.as_local(hour).date().isoformat()
+            calculator.add_to_day(self.days, day_key, amounts)
+        return done_until
+
+    async def _async_live(self) -> Amounts | None:
+        """Schätzt die noch nicht kompilierte Zeit aus der 5-Minuten-Statistik."""
+        if self._processed_until is None:
+            return None
+        now = dt_util.utcnow()
+        start = max(self._processed_until, now - LIVE_MAX)
+        ids = self._energy_ids()
+        stats = await async_get_statistics(self.hass, start, now, ids, "5minute", "change")
+        changes = {s: sum(stats.get(s, {}).values()) for s in ids}
+        plus, minus, export = self._roles()
+        return calculator.hour_amounts(
+            changes,
+            plus=plus,
+            minus=minus,
+            export_id=export,
+            price=self.current_price(),
+            feed_in=self.feed_in,
+        )
+
+    # ── Update ────────────────────────────────────────────────────────────────
+
+    async def _async_update_data(self) -> dict:
+        async with self._lock:
+            await self._async_process_hours()
+            self.live = await self._async_live()
+            return calculator.compute(
+                self.days,
+                investment=self.investment,
+                today=dt_util.now().date(),
+                live=self.live,
+            )
+
+    # ── Export für Karte / WebSocket ─────────────────────────────────────────
+
+    def export(self, month: str | None = None) -> dict:
+        today_key = dt_util.now().date().isoformat()
+        month = month or today_key[:7]
+        days = {
+            k: v for k, v in self.days.items() if k.startswith(month)
+        }
+        live_in_month = self.live if today_key.startswith(month) else None
+        return {
+            "entry_id": self.entry.entry_id,
+            "name": self.entry.title,
+            "currency": self.hass.config.currency,
+            "start_date": self.start_date.isoformat(),
+            "price_source": "sensor" if self._get(CONF_PRICE_SENSOR) else "fixed",
+            "current_price": self.current_price(),
+            "feed_in_tariff": self.feed_in,
+            "missing_price_hours": self.missing_price_hours,
+            "kpis": self.data or {},
+            "months": calculator.period_list(
+                calculator.aggregate(self.days, 7, self.live, today_key)
+            ),
+            "years": calculator.period_list(
+                calculator.aggregate(self.days, 4, self.live, today_key)
+            ),
+            "month": month,
+            "days": calculator.period_list(
+                calculator.aggregate(days, 10, live_in_month, today_key)
+            ),
+        }

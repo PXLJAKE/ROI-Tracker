@@ -9,109 +9,95 @@ DOMAIN: Final = "roi_tracker"
 # --- Config-/Options-Flow Schlüssel -----------------------------------------
 
 CONF_NAME: Final = "name"
-CONF_TEMPLATE: Final = "template"
 CONF_INVESTMENT: Final = "investment"
 CONF_START_DATE: Final = "start_date"
+CONF_MODE: Final = "calc_mode"
 
-# Energie-/Mengen-Sensoren (kWh)
-CONF_CONSUMPTION_SENSOR: Final = "consumption_sensor"    # Eigenverbrauch aus PV
-CONF_EXPORT_SENSOR: Final = "export_sensor"              # eingespeiste Energie
-CONF_BATTERY_DISCHARGE_SENSOR: Final = "battery_discharge_sensor"
-CONF_GRID_IMPORT_SENSOR: Final = "grid_import_sensor"    # Netzbezug (optional, nur Anzeige)
-
-# Veraltete Schlüssel (werden nicht mehr abgefragt, alte Einträge können sie
-# noch in entry.data haben – Konstanten bleiben für Abwärtskompatibilität):
-CONF_PRODUCTION_SENSOR: Final = "production_sensor"
+# Energie-Sensoren (kumulierte kWh-Zähler mit state_class)
+CONF_CONSUMPTION_SENSOR: Final = "consumption_sensor"  # Hausverbrauch bzw. Eigenverbrauch
+CONF_GRID_IMPORT_SENSOR: Final = "grid_import_sensor"  # Netzbezug
+CONF_EXPORT_SENSOR: Final = "export_sensor"  # Einspeisung
+CONF_PRODUCTION_SENSOR: Final = "production_sensor"  # PV-Erzeugung
 CONF_BATTERY_CHARGE_SENSOR: Final = "battery_charge_sensor"
+CONF_BATTERY_DISCHARGE_SENSOR: Final = "battery_discharge_sensor"
 
-# Preise / Erträge -----------------------------------------------------------
-CONF_PRICE_MODE: Final = "price_mode"      # fixed | sensor | cost_sensor
-CONF_PRICE_FIXED: Final = "price_fixed"    # €/kWh (fester Wert)
-CONF_PRICE_SENSOR: Final = "price_sensor"  # €/kWh (z. B. Tibber)
-CONF_COST_SENSOR: Final = "cost_sensor"    # € (fertiger kumulierter Kosten-Sensor)
+# Preise
+CONF_PRICE_SENSOR: Final = "price_sensor"  # dynamischer Strompreis (€/kWh, ct/kWh, €/MWh)
+CONF_PRICE_FIXED: Final = "price_fixed"  # fester Strompreis €/kWh (bzw. Fallback)
+CONF_FEED_IN_TARIFF: Final = "reward_fixed"  # Einspeisevergütung €/kWh (Schlüssel aus v1)
 
-CONF_REWARD_MODE: Final = "reward_mode"    # fixed | sensor | none
-CONF_REWARD_FIXED: Final = "reward_fixed"  # €/kWh
-CONF_REWARD_SENSOR: Final = "reward_sensor"
+ENERGY_SENSOR_KEYS: Final = (
+    CONF_CONSUMPTION_SENSOR,
+    CONF_GRID_IMPORT_SENSOR,
+    CONF_EXPORT_SENSOR,
+    CONF_PRODUCTION_SENSOR,
+    CONF_BATTERY_CHARGE_SENSOR,
+    CONF_BATTERY_DISCHARGE_SENSOR,
+)
 
-# Sensor-Verhalten
-CONF_SENSOR_RESET_DAILY: Final = "sensor_reset_daily"  # True = Sensoren setzen täglich zurück
+# Alle Schlüssel, die das Rechenergebnis beeinflussen (Investition nicht:
+# die ändert nur ROI/Amortisation, nicht die Tageswerte).
+CALC_KEYS: Final = (
+    CONF_START_DATE,
+    CONF_MODE,
+    *ENERGY_SENSOR_KEYS,
+    CONF_PRICE_SENSOR,
+    CONF_PRICE_FIXED,
+    CONF_FEED_IN_TARIFF,
+)
 
-# Nur für TEMPLATE_CUSTOM: manueller Vergleichswert
-CONF_BASELINE_RATE: Final = "baseline_rate"  # €/Einheit Alt-Lösung
-CONF_UNIT: Final = "unit"
+# --- Berechnungsarten ---------------------------------------------------------
 
-# --- Preis-Modi -------------------------------------------------------------
+# Eigenverbrauch = Hausverbrauch − Netzbezug
+MODE_HOUSE: Final = "house"
+# Eigenverbrauch = PV-Erzeugung − Einspeisung + Batterie-Entladung − Batterie-Ladung
+MODE_PV: Final = "pv"
+# Eigenverbrauch = fertiger Eigenverbrauchs-Sensor (+ Batterie-Entladung)
+MODE_DIRECT: Final = "direct"
 
-PRICE_MODE_FIXED: Final = "fixed"
-PRICE_MODE_SENSOR: Final = "sensor"
-PRICE_MODE_COST_SENSOR: Final = "cost_sensor"
-PRICE_MODE_NONE: Final = "none"
+MODES: Final = [MODE_HOUSE, MODE_PV, MODE_DIRECT]
 
-# --- Vorlagen ---------------------------------------------------------------
-
-TEMPLATE_PV: Final = "pv"
-TEMPLATE_CUSTOM: Final = "custom"
-
-TEMPLATES: Final = [
-    TEMPLATE_PV,
-    TEMPLATE_CUSTOM,
-]
-
-TEMPLATE_DEFAULTS: Final = {
-    TEMPLATE_PV: {
-        "unit": "kWh",
-        "currency_unit": "€/kWh",
-        "fields": [
-            CONF_CONSUMPTION_SENSOR,
-            CONF_EXPORT_SENSOR,
-            CONF_BATTERY_DISCHARGE_SENSOR,
-            CONF_GRID_IMPORT_SENSOR,
-        ],
-        "has_reward": True,
-    },
-    TEMPLATE_CUSTOM: {
-        "unit": "kWh",
-        "currency_unit": "€",
-        "fields": [
-            CONF_CONSUMPTION_SENSOR,
-            CONF_EXPORT_SENSOR,
-            CONF_GRID_IMPORT_SENSOR,
-        ],
-        "has_reward": True,
-        "has_baseline": True,
-    },
+# Welche Sensoren in welchem Modus abgefragt werden: (Schlüssel, Pflicht)
+MODE_SENSORS: Final = {
+    MODE_HOUSE: (
+        (CONF_CONSUMPTION_SENSOR, True),
+        (CONF_GRID_IMPORT_SENSOR, True),
+        (CONF_EXPORT_SENSOR, False),
+    ),
+    MODE_PV: (
+        (CONF_PRODUCTION_SENSOR, True),
+        (CONF_EXPORT_SENSOR, True),
+        (CONF_BATTERY_CHARGE_SENSOR, False),
+        (CONF_BATTERY_DISCHARGE_SENSOR, False),
+    ),
+    MODE_DIRECT: (
+        (CONF_CONSUMPTION_SENSOR, True),
+        (CONF_BATTERY_DISCHARGE_SENSOR, False),
+        (CONF_EXPORT_SENSOR, False),
+    ),
 }
 
-# --- Sensor-Kennungen (entity suffixes) -------------------------------------
+# --- Sensor-Kennungen (unique_id-Suffixe) -------------------------------------
+# Die ersten sechs existierten schon in v1 → Historie bleibt erhalten.
 
 SENSOR_SAVINGS: Final = "savings"
-SENSOR_BATTERY_SAVINGS: Final = "battery_savings"
 SENSOR_REVENUE: Final = "revenue"
 SENSOR_TOTAL_RETURN: Final = "total_return"
-SENSOR_AMORTIZATION: Final = "amortization"
 SENSOR_REMAINING: Final = "remaining_investment"
-SENSOR_BREAKEVEN_DAYS: Final = "breakeven_days"
-SENSOR_SELF_SUFFICIENCY: Final = "self_sufficiency"
+SENSOR_AMORTIZATION: Final = "amortization"
 SENSOR_ROI_PERCENT: Final = "roi_percent"
-SENSOR_DAILY_AVERAGE: Final = "daily_average"
-SENSOR_MONTHLY_ESTIMATE: Final = "monthly_estimate"
-SENSOR_GRID_IMPORT_COST: Final = "grid_import_cost"
-# Permanente kWh-Summier-Sensoren (akkumulieren auch über Reset-Sensoren hinweg)
-SENSOR_TOTAL_CONSUMPTION_KWH: Final = "total_consumption_kwh"
-SENSOR_TOTAL_EXPORT_KWH: Final = "total_export_kwh"
-SENSOR_TOTAL_BATTERY_DISCHARGE_KWH: Final = "total_battery_discharge_kwh"
-SENSOR_GRID_IMPORT_KWH: Final = "grid_import_kwh"
+SENSOR_YEARLY_ESTIMATE: Final = "yearly_estimate"
+SENSOR_BREAKEVEN_DATE: Final = "breakeven_date"
+SENSOR_SELF_KWH: Final = "total_consumption_kwh"
+SENSOR_EXPORT_KWH: Final = "total_export_kwh"
 
-# --- Sonstiges --------------------------------------------------------------
+# --- Sonstiges ----------------------------------------------------------------
 
 DEFAULT_UPDATE_INTERVAL_MINUTES: Final = 5
 
-# --- Services ---------------------------------------------------------------
-
-SERVICE_RESET: Final = "reset"
 SERVICE_RECALCULATE: Final = "recalculate"
 ATTR_START_DATE: Final = "start_date"
 
 STORAGE_VERSION: Final = 1
-STORAGE_KEY: Final = "roi_tracker_{entry_id}"
+STORAGE_KEY: Final = "roi_tracker_v2_{entry_id}"
+LEGACY_STORAGE_KEY: Final = "roi_tracker_{entry_id}"

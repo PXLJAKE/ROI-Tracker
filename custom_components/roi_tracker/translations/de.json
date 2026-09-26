@@ -2,152 +2,159 @@
   "config": {
     "step": {
       "user": {
-        "title": "ROI Tracker – Anlage anlegen",
-        "description": "Wähle eine Vorlage. Sie bestimmt, welche Felder anschließend angeboten werden.",
+        "title": "ROI Tracker – PV-Anlage anlegen",
+        "description": "Berechnet, wie viel du durch selbst genutzten PV-Strom sparst und durch Einspeisung verdienst – und wann sich die Anlage bezahlt gemacht hat. Gerechnet wird stündlich aus der Home-Assistant-Langzeitstatistik, auch rückwirkend ab dem Startdatum.",
         "data": {
-          "template": "Vorlage"
-        }
-      },
-      "setup": {
-        "title": "Anlage einrichten",
-        "description": "Gib die Investition und deine Sensoren an. Mengen-Sensoren müssen **kumulierte Zählerstände** sein (kWh), keine Momentanleistung (kW). Felder, die du nicht hast, lässt du leer.",
-        "data": {
-          "name": "Name der Anlage",
+          "name": "Name",
           "investment": "Anschaffungskosten",
-          "start_date": "Startdatum (optional, auch rückwirkend)",
-          "consumption_sensor": "PV-Eigenverbrauch (kWh, kumuliert)",
-          "export_sensor": "Einspeisung ins Netz (kWh, kumuliert)",
-          "battery_discharge_sensor": "Aus Batterie entnommen (kWh, kumuliert) – optional",
-          "grid_import_sensor": "Netzbezug (kWh, kumuliert) – optional",
-          "price_mode": "Woher kommt dein Strompreis (Bezug)?",
-          "baseline_rate": "Vergleichskosten der Alt-Lösung (€/kWh)",
-          "reward_mode": "Woher kommt deine Einspeisevergütung?",
-          "sensor_reset_daily": "Sensoren setzen täglich/monatlich zurück"
+          "start_date": "Inbetriebnahme / Startdatum",
+          "calc_mode": "Wie wird der Eigenverbrauch ermittelt?",
+          "price_sensor": "Dynamischer Strompreis (Sensor)",
+          "price_fixed": "Fester Strompreis (€/kWh)",
+          "reward_fixed": "Einspeisevergütung (€/kWh)"
         },
         "data_description": {
-          "investment": "Einmalige Investitionssumme in €, die sich amortisieren soll (z. B. 20000).",
-          "start_date": "Optional ein Datum in der Vergangenheit. Die Berechnung startet dann rückwirkend ab diesem Tag aus der gespeicherten Sensor-Historie.",
-          "consumption_sensor": "Direkt aus der PV-Anlage selbst genutzter Strom in kWh – NICHT der Netzbezug. Wichtig: Wenn du unten einen Batterie-Sensor angibst, darf dieser Wert die Batterie-Entnahme NICHT enthalten, sonst wird sie doppelt gezählt. Menge × Strompreis = deine Ersparnis.",
-          "export_sensor": "Die ins Netz eingespeiste Energie in kWh. Menge × Einspeisevergütung = dein Einspeiseertrag.",
-          "battery_discharge_sensor": "Aus der Batterie entnommene Energie in kWh. Wird wie Eigenverbrauch als Ersparnis gewertet und separat ausgewiesen. Weglassen, wenn dein Eigenverbrauchs-Sensor die Batterie bereits enthält.",
-          "grid_import_sensor": "Optional: kumulierter Netzbezug in kWh (z. B. Tibber oder Smartmeter). Wird NICHT vom ROI abgezogen – dient nur der transparenten Anzeige, wie viel du noch aus dem Netz beziehst.",
-          "price_mode": "Bestimmt, wie der Geldwert deines Eigenverbrauchs berechnet wird.",
-          "baseline_rate": "Was dich eine kWh mit der alten Lösung gekostet hätte. Die Ersparnis ergibt sich aus der Differenz zum aktuellen Preis.",
-          "sensor_reset_daily": "Aktivieren wenn deine Sensoren nicht dauerhaft kumulieren, sondern täglich (z. B. Tagesertrag vom Wechselrichter) oder monatlich zurücksetzen. Beim Erkennen eines Resets wird der aktuelle Wert als heutiger Teiltagswert weiter akkumuliert."
+          "investment": "Gesamtkosten der Anlage in €, die sich amortisieren sollen.",
+          "start_date": "Ab diesem Tag wird gerechnet – auch in der Vergangenheit, soweit HA Statistikdaten hat.",
+          "price_sensor": "Z. B. Tibber-, aWATTar- oder EPEX-Preis. Einheit €/kWh, ct/kWh oder €/MWh wird automatisch erkannt. Am besten ein Sensor mit Langzeitstatistik (state_class), sonst ist die Rückrechnung nur für die letzten ~10 Tage stundengenau.",
+          "price_fixed": "Dein Arbeitspreis, z. B. 0,32. Mit Preis-Sensor: wird nur für Zeiten ohne Preisdaten verwendet.",
+          "reward_fixed": "Z. B. 0,082 für 8,2 ct/kWh. 0 wenn du keine Vergütung bekommst."
         }
       },
-      "sources": {
-        "title": "Preise & Vergütung",
-        "description": "Trage die zu deiner Auswahl passenden Werte ein. Preise immer in **€ pro kWh** (z. B. 0,30).",
+      "sensors_house": {
+        "title": "Sensoren: Hausverbrauch & Netzbezug",
+        "description": "Ersparnis pro Stunde = (Hausverbrauch − Netzbezug) × Strompreis. Eine Batterie ist damit automatisch korrekt enthalten. Alle Sensoren müssen kumulierte kWh-Zähler sein (wie im Energie-Dashboard).",
         "data": {
-          "price_fixed": "Fester Strompreis (€/kWh)",
-          "price_sensor": "Strompreis-Sensor (€/kWh, z. B. Tibber)",
-          "cost_sensor": "Sensor: €-Wert der Ersparnis (kumuliert)",
-          "reward_fixed": "Feste Einspeisevergütung (€/kWh)",
-          "reward_sensor": "Sensor: Einspeiseertrag in € (kumuliert)"
+          "consumption_sensor": "Hausverbrauch gesamt (kWh)",
+          "grid_import_sensor": "Netzbezug (kWh)",
+          "export_sensor": "Einspeisung (kWh)"
         },
         "data_description": {
-          "price_fixed": "Dein Arbeitspreis pro kWh, z. B. 0,30.",
-          "price_sensor": "Sensor mit aktuellem Arbeitspreis in €/kWh (z. B. Tibber). Jede selbst genutzte kWh wird mit dem jeweils aktuellen Preis bewertet.",
-          "cost_sensor": "Nur wählen, wenn du bereits einen Sensor hast, der den ersparten Betrag in € kumuliert. NICHT deine Stromrechnung – das wären Ausgaben, keine Ersparnis.",
-          "reward_fixed": "Deine Einspeisevergütung pro kWh, z. B. 0,082.",
-          "reward_sensor": "Sensor, der den erhaltenen Einspeiseertrag in € kumuliert."
+          "consumption_sensor": "Gesamter Stromverbrauch des Hauses – egal ob aus PV, Batterie oder Netz.",
+          "export_sensor": "Optional – nötig für den Einspeiseertrag."
+        }
+      },
+      "sensors_pv": {
+        "title": "Sensoren: PV-Erzeugung & Einspeisung",
+        "description": "Eigenverbrauch pro Stunde = PV-Erzeugung − Einspeisung + Batterie-Entladung − Batterie-Ladung. Alle Sensoren müssen kumulierte kWh-Zähler sein (wie im Energie-Dashboard).",
+        "data": {
+          "production_sensor": "PV-Erzeugung (kWh)",
+          "export_sensor": "Einspeisung (kWh)",
+          "battery_charge_sensor": "Batterie geladen (kWh)",
+          "battery_discharge_sensor": "Batterie entladen (kWh)"
+        },
+        "data_description": {
+          "battery_charge_sensor": "Optional – nur zusammen mit „Batterie entladen“.",
+          "battery_discharge_sensor": "Optional – nur zusammen mit „Batterie geladen“."
+        }
+      },
+      "sensors_direct": {
+        "title": "Sensoren: fertiger Eigenverbrauch",
+        "description": "Für Anlagen, die den Eigenverbrauch direkt messen. Ersparnis pro Stunde = (Eigenverbrauch + Batterie-Entladung) × Strompreis.",
+        "data": {
+          "consumption_sensor": "PV-Eigenverbrauch (kWh)",
+          "battery_discharge_sensor": "Batterie entladen (kWh)",
+          "export_sensor": "Einspeisung (kWh)"
+        },
+        "data_description": {
+          "consumption_sensor": "Direkt genutzter PV-Strom – NICHT der Hausverbrauch und NICHT der Netzbezug.",
+          "battery_discharge_sensor": "Optional – nur angeben, wenn der Eigenverbrauch die Batterie NICHT bereits enthält."
         }
       }
     },
-    "abort": {
-      "already_configured": "Diese Anlage ist bereits konfiguriert."
+    "error": {
+      "price_required": "Bitte einen Strompreis-Sensor oder einen festen Strompreis angeben.",
+      "no_state_class": "Dieser Sensor hat keine Langzeitstatistik (state_class fehlt) und kann nicht verwendet werden.",
+      "duplicate_sensor": "Jeder Sensor darf nur einmal ausgewählt werden.",
+      "battery_pair": "Batterie geladen und Batterie entladen bitte gemeinsam angeben (oder beide leer lassen)."
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Anlage bearbeiten",
-        "description": "Passe Investition, Sensoren und Preisquellen an.",
+        "description": "Änderungen an Startdatum, Sensoren oder Preisen lösen automatisch eine komplette Neuberechnung aus.",
         "data": {
-          "name": "Name der Anlage",
+          "name": "Name",
           "investment": "Anschaffungskosten",
-          "start_date": "Startdatum (optional, auch rückwirkend)",
-          "consumption_sensor": "PV-Eigenverbrauch (kWh, kumuliert)",
-          "export_sensor": "Einspeisung ins Netz (kWh, kumuliert)",
-          "battery_discharge_sensor": "Aus Batterie entnommen (kWh, kumuliert) – optional",
-          "grid_import_sensor": "Netzbezug (kWh, kumuliert) – optional",
-          "price_mode": "Woher kommt dein Strompreis (Bezug)?",
-          "baseline_rate": "Vergleichskosten der Alt-Lösung (€/kWh)",
-          "reward_mode": "Woher kommt deine Einspeisevergütung?",
-          "sensor_reset_daily": "Sensoren setzen täglich/monatlich zurück"
+          "start_date": "Inbetriebnahme / Startdatum",
+          "calc_mode": "Wie wird der Eigenverbrauch ermittelt?",
+          "price_sensor": "Dynamischer Strompreis (Sensor)",
+          "price_fixed": "Fester Strompreis (€/kWh)",
+          "reward_fixed": "Einspeisevergütung (€/kWh)"
         },
         "data_description": {
-          "consumption_sensor": "Direkter PV-Eigenverbrauch – NICHT der Netzbezug. Batterie-Entnahme nicht mitzählen, wenn ein Batterie-Sensor angegeben ist.",
-          "grid_import_sensor": "Optional: kumulierter Netzbezug (nur für Anzeige, nicht ROI-wirksam).",
-          "sensor_reset_daily": "Aktivieren wenn Sensoren täglich oder monatlich zurücksetzen."
+          "price_sensor": "Einheit €/kWh, ct/kWh oder €/MWh wird automatisch erkannt.",
+          "price_fixed": "Mit Preis-Sensor: wird nur für Zeiten ohne Preisdaten verwendet."
         }
       },
-      "sources": {
-        "title": "Preise & Vergütung",
-        "description": "Trage die zu deiner Auswahl passenden Werte ein.",
+      "sensors_house": {
+        "title": "Sensoren: Hausverbrauch & Netzbezug",
+        "description": "Ersparnis pro Stunde = (Hausverbrauch − Netzbezug) × Strompreis.",
         "data": {
-          "price_fixed": "Fester Strompreis (€/kWh)",
-          "price_sensor": "Strompreis-Sensor (€/kWh, z. B. Tibber)",
-          "cost_sensor": "Sensor: €-Wert der Ersparnis (kumuliert)",
-          "reward_fixed": "Feste Einspeisevergütung (€/kWh)",
-          "reward_sensor": "Sensor: Einspeiseertrag in € (kumuliert)"
-        },
-        "data_description": {
-          "price_sensor": "Sensor mit aktuellem Arbeitspreis in €/kWh (z. B. Tibber).",
-          "cost_sensor": "Nur ein Sensor, der den ersparten Betrag in € kumuliert – nicht die Stromrechnung."
+          "consumption_sensor": "Hausverbrauch gesamt (kWh)",
+          "grid_import_sensor": "Netzbezug (kWh)",
+          "export_sensor": "Einspeisung (kWh)"
+        }
+      },
+      "sensors_pv": {
+        "title": "Sensoren: PV-Erzeugung & Einspeisung",
+        "description": "Eigenverbrauch pro Stunde = PV-Erzeugung − Einspeisung + Batterie-Entladung − Batterie-Ladung.",
+        "data": {
+          "production_sensor": "PV-Erzeugung (kWh)",
+          "export_sensor": "Einspeisung (kWh)",
+          "battery_charge_sensor": "Batterie geladen (kWh)",
+          "battery_discharge_sensor": "Batterie entladen (kWh)"
+        }
+      },
+      "sensors_direct": {
+        "title": "Sensoren: fertiger Eigenverbrauch",
+        "description": "Ersparnis pro Stunde = (Eigenverbrauch + Batterie-Entladung) × Strompreis.",
+        "data": {
+          "consumption_sensor": "PV-Eigenverbrauch (kWh)",
+          "battery_discharge_sensor": "Batterie entladen (kWh)",
+          "export_sensor": "Einspeisung (kWh)"
         }
       }
+    },
+    "error": {
+      "price_required": "Bitte einen Strompreis-Sensor oder einen festen Strompreis angeben.",
+      "no_state_class": "Dieser Sensor hat keine Langzeitstatistik (state_class fehlt) und kann nicht verwendet werden.",
+      "duplicate_sensor": "Jeder Sensor darf nur einmal ausgewählt werden.",
+      "battery_pair": "Batterie geladen und Batterie entladen bitte gemeinsam angeben (oder beide leer lassen)."
     }
   },
   "selector": {
-    "template": {
+    "calc_mode": {
       "options": {
-        "pv": "PV-Anlage (mit Speicher)",
-        "custom": "Benutzerdefiniert"
-      }
-    },
-    "price_mode": {
-      "options": {
-        "fixed": "Fester Preis (€/kWh)",
-        "sensor": "Dynamischer Preis-Sensor (€/kWh, z. B. Tibber)",
-        "cost_sensor": "Fertiger €-Wert-Sensor",
-        "none": "Keine"
+        "house": "Hausverbrauch − Netzbezug (empfohlen)",
+        "pv": "PV-Erzeugung − Einspeisung (± Batterie)",
+        "direct": "Ich habe einen fertigen Eigenverbrauchs-Sensor"
       }
     }
   },
   "entity": {
     "sensor": {
-      "total_return": { "name": "Gesamtrückfluss" },
-      "savings": { "name": "Ersparnis (Eigenverbrauch)" },
-      "battery_savings": { "name": "Ersparnis (Batterie)" },
+      "total_return": { "name": "Gesamtertrag" },
+      "savings": { "name": "Ersparnis" },
       "revenue": { "name": "Einspeiseertrag" },
       "remaining_investment": { "name": "Offener Restbetrag" },
       "amortization": { "name": "Amortisation" },
       "roi_percent": { "name": "ROI" },
-      "breakeven_days": { "name": "Restlaufzeit bis Break-Even" },
-      "self_sufficiency": { "name": "Eigenverbrauchsquote" },
-      "daily_average": { "name": "Tages-Ø Rückfluss" },
-      "monthly_estimate": { "name": "Monatliche Prognose" },
-      "grid_import_cost": { "name": "Netzbezug (Kosten)" },
-      "total_consumption_kwh": { "name": "Eigenverbrauch gesamt (kWh)" },
-      "total_export_kwh": { "name": "Einspeisung gesamt (kWh)" },
-      "total_battery_discharge_kwh": { "name": "Batterie-Entladung gesamt (kWh)" },
-      "grid_import_kwh": { "name": "Netzbezug gesamt (kWh)" }
+      "yearly_estimate": { "name": "Jahresprognose" },
+      "breakeven_date": { "name": "Break-Even-Datum" },
+      "total_consumption_kwh": { "name": "Eigenverbrauch gesamt" },
+      "total_export_kwh": { "name": "Einspeisung gesamt" }
     }
   },
   "services": {
-    "reset": {
-      "name": "Zurücksetzen",
-      "description": "Setzt einen ROI-Rechner auf null zurück. Alle kumulierten Werte und der gespeicherte Zustand werden gelöscht."
-    },
     "recalculate": {
-      "name": "Rückwirkend neu berechnen",
-      "description": "Setzt einen ROI-Rechner zurück und berechnet ihn rückwirkend aus der gespeicherten Sensor-Historie neu.",
+      "name": "Neu berechnen",
+      "description": "Berechnet eine Anlage komplett neu aus der Langzeitstatistik – optional ab einem neuen Startdatum.",
       "fields": {
         "start_date": {
           "name": "Startdatum",
-          "description": "Datum, ab dem rückwirkend gerechnet werden soll (optional; sonst das in der Anlage konfigurierte Startdatum)."
+          "description": "Optional: neues Startdatum (wird in der Anlage gespeichert)."
         }
       }
     }

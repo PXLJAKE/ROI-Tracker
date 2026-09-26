@@ -1,17 +1,15 @@
 # Brand-Assets
 
-HACS/Home Assistant zeigt das Logo der Integration aus dem zentralen
-[home-assistant/brands](https://github.com/home-assistant/brands)-Repository.
+Seit Home Assistant 2026.3 liefern Custom Integrations ihre Icons selbst aus –
+das zentrale [home-assistant/brands](https://github.com/home-assistant/brands)-Repository
+nimmt für Custom Integrations keine Icons mehr an
+([Ankündigung](https://developers.home-assistant.io/blog/2026/02/24/brands-proxy-api)).
 
-Um ein Icon/Logo zu hinterlegen, reiche dort einen Pull Request ein:
+Die Icons liegen deshalb direkt in der Integration:
 
 ```
-custom_integrations/roi_tracker/icon.png   (256×256, transparent)
-custom_integrations/roi_tracker/logo.png   (optional, breiteres Logo)
+custom_components/roi_tracker/brand/icon.png      (256×256, transparent)
+custom_components/roi_tracker/brand/icon@2x.png   (512×512, transparent)
 ```
 
-Solange das nicht gemerged ist, nutzt Home Assistant ein generisches Standard-Icon –
-die Integration funktioniert dennoch vollständig.
-
-> Lege die fertigen PNGs zusätzlich hier ab (`brands/icon.png`, `brands/logo.png`),
-> damit sie versioniert sind und für den Brands-PR bereitliegen.
+Neu erzeugen: `python scripts/generate_icon.py`

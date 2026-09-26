@@ -1,111 +1,106 @@
-"""Liest historische Sensor-Zählerstände aus dem Recorder.
+"""Zugriff auf den HA-Recorder: Langzeitstatistik und Zustands-Historie.
 
-Wird genutzt, um die ROI-Berechnung rückwirkend ab einem gewählten Startdatum
-zu starten: Der Zählerstand eines Sensors zu diesem Datum dient als Basislinie.
-
-Primär werden die Langzeit-Statistiken genutzt (bleiben für Sensoren mit
-state_class praktisch unbegrenzt erhalten). Fällt das aus, gibt es einen
-Fallback auf die rohe Zustands-Historie (nur für jüngere Daten verfügbar, da
-diese nach der Recorder-Aufbewahrungszeit gelöscht wird).
-
-Alles defensiv: Bei jedem Problem wird ``None`` zurückgegeben, sodass die
-Berechnung einfach „ab jetzt" startet, statt das Setup zu blockieren.
+Alles defensiv: Bei Problemen wird ein leeres Ergebnis geliefert, damit die
+Integration nicht abstürzt, sondern beim nächsten Update erneut versucht.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_get_sensor_value_at(
-    hass: HomeAssistant, entity_id: str | None, when: datetime
-) -> float | None:
-    """Ermittelt den numerischen Wert von ``entity_id`` zum Zeitpunkt ``when``.
-
-    Gibt ``None`` zurück, wenn kein Wert gefunden wird oder der Recorder fehlt.
-    """
-    if not entity_id:
-        return None
-
-    value = await _async_from_statistics(hass, entity_id, when)
-    if value is not None:
-        return value
-    return await _async_from_history(hass, entity_id, when)
+def _row_start(value) -> datetime | None:
+    """Statistik-Zeilen liefern ``start`` je nach HA-Version als Timestamp oder datetime."""
+    if isinstance(value, (int, float)):
+        return dt_util.utc_from_timestamp(value)
+    if isinstance(value, datetime):
+        return dt_util.as_utc(value)
+    return None
 
 
-async def _async_from_statistics(
-    hass: HomeAssistant, entity_id: str, when: datetime
-) -> float | None:
+async def async_get_statistics(
+    hass: HomeAssistant,
+    start: datetime,
+    end: datetime,
+    statistic_ids: set[str],
+    period: str,
+    stat_type: str,
+) -> dict[str, dict[datetime, float]]:
+    """Liefert {statistic_id: {Periodenbeginn (UTC): Wert}} für ``change`` oder ``mean``."""
+    if not statistic_ids or start >= end:
+        return {}
     try:
         from homeassistant.components.recorder import get_instance
         from homeassistant.components.recorder.statistics import (
             statistics_during_period,
         )
-    except ImportError:
-        return None
 
-    end = when + timedelta(days=3)
-
-    def _run() -> float | None:
-        stats = statistics_during_period(
-            hass, when, end, {entity_id}, "hour", None, {"state"}
+        raw = await get_instance(hass).async_add_executor_job(
+            statistics_during_period,
+            hass,
+            start,
+            end,
+            statistic_ids,
+            period,
+            None,
+            {stat_type},
         )
-        rows = stats.get(entity_id)
-        if not rows:
-            return None
-        # Erste Stunde ab dem Startdatum: deren Mess-State ist der Zählerstand.
-        state = rows[0].get("state")
-        try:
-            return float(state) if state is not None else None
-        except (ValueError, TypeError):
-            return None
-
-    try:
-        return await get_instance(hass).async_add_executor_job(_run)
     except Exception as err:  # noqa: BLE001 - defensiv
-        _LOGGER.debug("Statistik-Abfrage für %s fehlgeschlagen: %s", entity_id, err)
-        return None
+        _LOGGER.warning("Statistik konnte nicht gelesen werden: %s", err)
+        return {}
+
+    out: dict[str, dict[datetime, float]] = {}
+    for stat_id, rows in raw.items():
+        series: dict[datetime, float] = {}
+        for row in rows:
+            ts = _row_start(row.get("start"))
+            value = row.get(stat_type)
+            if ts is not None and value is not None:
+                series[ts] = float(value)
+        out[stat_id] = series
+    return out
 
 
-async def _async_from_history(
-    hass: HomeAssistant, entity_id: str, when: datetime
-) -> float | None:
+async def async_get_state_points(
+    hass: HomeAssistant, entity_id: str, start: datetime, end: datetime
+) -> list[tuple[datetime, float | None]]:
+    """Zustandsänderungen eines Sensors als (Zeitpunkt, Zahl oder None).
+
+    Enthält den Zustand zum Startzeitpunkt. Nur für die letzten Tage verfügbar
+    (Recorder-Aufbewahrung, Standard 10 Tage).
+    """
     try:
         from homeassistant.components.recorder import get_instance
         from homeassistant.components.recorder.history import (
             state_changes_during_period,
         )
-    except ImportError:
-        return None
 
-    end = when + timedelta(days=3)
+        def _run():
+            return state_changes_during_period(
+                hass,
+                start,
+                end,
+                entity_id,
+                no_attributes=True,
+                include_start_time_state=True,
+            )
 
-    def _run() -> float | None:
-        result = state_changes_during_period(
-            hass,
-            when,
-            end,
-            entity_id,
-            include_start_time_state=True,
-            no_attributes=True,
-        )
-        states = result.get(entity_id)
-        if not states:
-            return None
-        for state in states:
-            try:
-                return float(state.state)
-            except (ValueError, TypeError):
-                continue
-        return None
-
-    try:
-        return await get_instance(hass).async_add_executor_job(_run)
+        result = await get_instance(hass).async_add_executor_job(_run)
     except Exception as err:  # noqa: BLE001 - defensiv
-        _LOGGER.debug("Historie-Abfrage für %s fehlgeschlagen: %s", entity_id, err)
-        return None
+        _LOGGER.debug("Historie für %s nicht lesbar: %s", entity_id, err)
+        return []
+
+    points: list[tuple[datetime, float | None]] = []
+    for state in result.get(entity_id, []):
+        try:
+            value: float | None = float(state.state)
+        except (ValueError, TypeError):
+            value = None
+        points.append((max(dt_util.as_utc(state.last_changed), start), value))
+    return points

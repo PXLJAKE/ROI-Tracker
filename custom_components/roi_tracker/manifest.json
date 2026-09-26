@@ -1,14 +1,14 @@
 {
   "domain": "roi_tracker",
   "name": "ROI Tracker",
-  "after_dependencies": ["recorder", "lovelace"],
+  "after_dependencies": ["frontend", "lovelace"],
   "codeowners": ["@pxljake"],
   "config_flow": true,
-  "dependencies": ["http"],
+  "dependencies": ["http", "recorder", "websocket_api"],
   "documentation": "https://github.com/pxljake/roi-tracker",
   "integration_type": "device",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/pxljake/roi-tracker/issues",
   "requirements": [],
-  "version": "0.3.3"
+  "version": "0.4.0"
 }
