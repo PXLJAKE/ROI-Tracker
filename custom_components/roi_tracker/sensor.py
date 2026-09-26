@@ -1,9 +1,11 @@
-"""Sensor-Entitäten für einen ROI-Rechner."""
+"""Sensor-Entitäten einer Anlage."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -11,200 +13,128 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
+from homeassistant.const import PERCENTAGE, UnitOfEnergy
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import RoiConfigEntry
-from .calculator import RoiResult
 from .const import (
-    CONF_BATTERY_DISCHARGE_SENSOR,
-    CONF_CONSUMPTION_SENSOR,
     CONF_EXPORT_SENSOR,
-    CONF_GRID_IMPORT_SENSOR,
-    CONF_TEMPLATE,
     DOMAIN,
     SENSOR_AMORTIZATION,
-    SENSOR_BATTERY_SAVINGS,
-    SENSOR_BREAKEVEN_DAYS,
-    SENSOR_DAILY_AVERAGE,
-    SENSOR_GRID_IMPORT_COST,
-    SENSOR_GRID_IMPORT_KWH,
-    SENSOR_MONTHLY_ESTIMATE,
+    SENSOR_BREAKEVEN_DATE,
+    SENSOR_EXPORT_KWH,
     SENSOR_REMAINING,
     SENSOR_REVENUE,
     SENSOR_ROI_PERCENT,
     SENSOR_SAVINGS,
-    SENSOR_SELF_SUFFICIENCY,
-    SENSOR_TOTAL_BATTERY_DISCHARGE_KWH,
-    SENSOR_TOTAL_CONSUMPTION_KWH,
-    SENSOR_TOTAL_EXPORT_KWH,
+    SENSOR_SELF_KWH,
     SENSOR_TOTAL_RETURN,
+    SENSOR_YEARLY_ESTIMATE,
 )
 from .coordinator import RoiTrackerCoordinator
-
-CURRENCY = "€"
 
 
 @dataclass(frozen=True, kw_only=True)
 class RoiSensorDescription(SensorEntityDescription):
-    """Beschreibung eines ROI-Sensors inkl. Wert-Extraktor."""
-
-    value_fn: Callable[[RoiResult], float | None]
-    # Sensor wird nur angelegt, wenn dieser Config-Schlüssel gesetzt ist
-    # (None = immer anlegen). Verhindert leere Entitäten ohne Datenquelle.
+    value_fn: Callable[[dict], Any]
+    currency: bool = False
     required_conf: str | None = None
+
+
+def _date(value: str | None) -> date | None:
+    return date.fromisoformat(value) if value else None
 
 
 SENSOR_DESCRIPTIONS: tuple[RoiSensorDescription, ...] = (
     RoiSensorDescription(
         key=SENSOR_TOTAL_RETURN,
         translation_key=SENSOR_TOTAL_RETURN,
-        native_unit_of_measurement=CURRENCY,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         icon="mdi:cash-multiple",
-        value_fn=lambda r: r.total_return,
+        currency=True,
+        value_fn=lambda d: d["total_return"],
     ),
     RoiSensorDescription(
         key=SENSOR_SAVINGS,
         translation_key=SENSOR_SAVINGS,
-        native_unit_of_measurement=CURRENCY,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         icon="mdi:piggy-bank",
-        value_fn=lambda r: r.savings,
-    ),
-    RoiSensorDescription(
-        key=SENSOR_BATTERY_SAVINGS,
-        translation_key=SENSOR_BATTERY_SAVINGS,
-        native_unit_of_measurement=CURRENCY,
-        device_class=SensorDeviceClass.MONETARY,
-        state_class=SensorStateClass.TOTAL,
-        icon="mdi:battery-charging",
-        value_fn=lambda r: r.battery_savings,
-        required_conf=CONF_BATTERY_DISCHARGE_SENSOR,
+        currency=True,
+        value_fn=lambda d: d["savings"],
     ),
     RoiSensorDescription(
         key=SENSOR_REVENUE,
         translation_key=SENSOR_REVENUE,
-        native_unit_of_measurement=CURRENCY,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         icon="mdi:transmission-tower-export",
-        value_fn=lambda r: r.revenue,
+        currency=True,
+        value_fn=lambda d: d["revenue"],
+        required_conf=CONF_EXPORT_SENSOR,
     ),
     RoiSensorDescription(
         key=SENSOR_REMAINING,
         translation_key=SENSOR_REMAINING,
-        native_unit_of_measurement=CURRENCY,
         device_class=SensorDeviceClass.MONETARY,
         icon="mdi:cash-clock",
-        value_fn=lambda r: r.remaining_investment,
+        currency=True,
+        value_fn=lambda d: d["remaining"],
     ),
     RoiSensorDescription(
         key=SENSOR_AMORTIZATION,
         translation_key=SENSOR_AMORTIZATION,
-        native_unit_of_measurement="%",
+        native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:progress-check",
-        value_fn=lambda r: r.amortization_percent,
+        value_fn=lambda d: d["amortization"],
     ),
     RoiSensorDescription(
         key=SENSOR_ROI_PERCENT,
         translation_key=SENSOR_ROI_PERCENT,
-        native_unit_of_measurement="%",
+        native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:chart-line",
-        value_fn=lambda r: r.roi_percent,
+        value_fn=lambda d: d["roi"],
     ),
     RoiSensorDescription(
-        key=SENSOR_BREAKEVEN_DAYS,
-        translation_key=SENSOR_BREAKEVEN_DAYS,
-        native_unit_of_measurement="d",
-        icon="mdi:calendar-clock",
-        value_fn=lambda r: r.breakeven_days,
-    ),
-    RoiSensorDescription(
-        key=SENSOR_SELF_SUFFICIENCY,
-        translation_key=SENSOR_SELF_SUFFICIENCY,
-        native_unit_of_measurement="%",
-        state_class=SensorStateClass.MEASUREMENT,
-        icon="mdi:home-lightning-bolt",
-        value_fn=lambda r: r.self_sufficiency_percent,
-        required_conf=CONF_CONSUMPTION_SENSOR,
-    ),
-    # Durchschnitts-/Prognosewerte: bewusst OHNE device_class monetary –
-    # monetary erlaubt nur state_class total, measurement wäre ungültig.
-    RoiSensorDescription(
-        key=SENSOR_DAILY_AVERAGE,
-        translation_key=SENSOR_DAILY_AVERAGE,
-        native_unit_of_measurement=CURRENCY,
-        state_class=SensorStateClass.MEASUREMENT,
-        icon="mdi:calendar-today",
-        value_fn=lambda r: r.daily_average,
-    ),
-    RoiSensorDescription(
-        key=SENSOR_MONTHLY_ESTIMATE,
-        translation_key=SENSOR_MONTHLY_ESTIMATE,
-        native_unit_of_measurement=CURRENCY,
-        state_class=SensorStateClass.MEASUREMENT,
-        icon="mdi:calendar-month",
-        value_fn=lambda r: r.monthly_estimate,
-    ),
-    RoiSensorDescription(
-        key=SENSOR_GRID_IMPORT_COST,
-        translation_key=SENSOR_GRID_IMPORT_COST,
-        native_unit_of_measurement=CURRENCY,
+        key=SENSOR_YEARLY_ESTIMATE,
+        translation_key=SENSOR_YEARLY_ESTIMATE,
         device_class=SensorDeviceClass.MONETARY,
-        state_class=SensorStateClass.TOTAL,
-        icon="mdi:transmission-tower-import",
-        value_fn=lambda r: r.grid_import_cost,
-        required_conf=CONF_GRID_IMPORT_SENSOR,
+        icon="mdi:calendar-range",
+        currency=True,
+        value_fn=lambda d: d["yearly_estimate"],
     ),
-    # ── Permanente kWh-Summier-Sensoren ──────────────────────────────────────
-    # Diese Sensoren akkumulieren dauerhaft, auch wenn der Quell-Sensor täglich
-    # oder monatlich zurücksetzt. Nützlich für Automationen und externe Karten.
     RoiSensorDescription(
-        key=SENSOR_TOTAL_CONSUMPTION_KWH,
-        translation_key=SENSOR_TOTAL_CONSUMPTION_KWH,
-        native_unit_of_measurement="kWh",
+        key=SENSOR_BREAKEVEN_DATE,
+        translation_key=SENSOR_BREAKEVEN_DATE,
+        device_class=SensorDeviceClass.DATE,
+        icon="mdi:calendar-check",
+        value_fn=lambda d: _date(d["breakeven_date"]),
+    ),
+    RoiSensorDescription(
+        key=SENSOR_SELF_KWH,
+        translation_key=SENSOR_SELF_KWH,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,
         icon="mdi:home-lightning-bolt-outline",
-        value_fn=lambda r: r.total_consumption_kwh,
-        required_conf=CONF_CONSUMPTION_SENSOR,
+        value_fn=lambda d: d["self_kwh"],
     ),
     RoiSensorDescription(
-        key=SENSOR_TOTAL_EXPORT_KWH,
-        translation_key=SENSOR_TOTAL_EXPORT_KWH,
-        native_unit_of_measurement="kWh",
+        key=SENSOR_EXPORT_KWH,
+        translation_key=SENSOR_EXPORT_KWH,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,
         icon="mdi:transmission-tower-export",
-        value_fn=lambda r: r.total_export_kwh,
+        value_fn=lambda d: d["export_kwh"],
         required_conf=CONF_EXPORT_SENSOR,
-    ),
-    RoiSensorDescription(
-        key=SENSOR_TOTAL_BATTERY_DISCHARGE_KWH,
-        translation_key=SENSOR_TOTAL_BATTERY_DISCHARGE_KWH,
-        native_unit_of_measurement="kWh",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL,
-        icon="mdi:battery-arrow-down",
-        value_fn=lambda r: r.total_battery_discharge_kwh,
-        required_conf=CONF_BATTERY_DISCHARGE_SENSOR,
-    ),
-    RoiSensorDescription(
-        key=SENSOR_GRID_IMPORT_KWH,
-        translation_key=SENSOR_GRID_IMPORT_KWH,
-        native_unit_of_measurement="kWh",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL,
-        icon="mdi:transmission-tower-import",
-        value_fn=lambda r: r.grid_import_kwh,
-        required_conf=CONF_GRID_IMPORT_SENSOR,
     ),
 )
 
@@ -214,24 +144,24 @@ async def async_setup_entry(
     entry: RoiConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Legt die Sensoren für eine Anlage an.
-
-    Sensoren ohne konfigurierte Datenquelle (z. B. Batterie-Ersparnis ohne
-    Batterie-Sensor) werden gar nicht erst erzeugt – so gibt es keine
-    dauerhaft leeren Entitäten.
-    """
     coordinator = entry.runtime_data
     cfg = coordinator.config
-    async_add_entities(
-        RoiSensor(coordinator, entry, description)
-        for description in SENSOR_DESCRIPTIONS
-        if description.required_conf is None or cfg.get(description.required_conf)
-    )
+    descriptions = [
+        d for d in SENSOR_DESCRIPTIONS if d.required_conf is None or cfg.get(d.required_conf)
+    ]
+
+    # Entitäten, die es nicht mehr gibt (v1 hatte 16 Sensoren, oder ein Sensor
+    # wurde abgewählt), aus der Registry entfernen statt „nicht verfügbar“ zu zeigen.
+    wanted = {f"{entry.entry_id}_{d.key}" for d in descriptions}
+    ent_reg = er.async_get(hass)
+    for reg_entry in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
+        if reg_entry.unique_id not in wanted:
+            ent_reg.async_remove(reg_entry.entity_id)
+
+    async_add_entities(RoiSensor(coordinator, entry, d) for d in descriptions)
 
 
 class RoiSensor(CoordinatorEntity[RoiTrackerCoordinator], SensorEntity):
-    """Ein einzelner ROI-Kennzahl-Sensor."""
-
     entity_description: RoiSensorDescription
     _attr_has_entity_name = True
 
@@ -244,22 +174,34 @@ class RoiSensor(CoordinatorEntity[RoiTrackerCoordinator], SensorEntity):
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
+        if description.currency:
+            self._attr_native_unit_of_measurement = coordinator.hass.config.currency
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=entry.title,
             manufacturer="ROI Tracker",
-            model=entry.data.get(CONF_TEMPLATE, "custom"),
+            model="PV-Amortisation",
         )
 
     @property
-    def native_value(self) -> float | None:
-        if self.coordinator.data is None:
+    def native_value(self) -> Any:
+        if not self.coordinator.data:
             return None
         return self.entity_description.value_fn(self.coordinator.data)
 
     @property
     def extra_state_attributes(self) -> dict | None:
-        # Nur am "Gesamtrückfluss"-Sensor die Detailwerte anhängen.
-        if self.entity_description.key == SENSOR_TOTAL_RETURN and self.coordinator.data:
-            return self.coordinator.data.attributes
-        return None
+        data = self.coordinator.data
+        if self.entity_description.key != SENSOR_TOTAL_RETURN or not data:
+            return None
+        return {
+            "investment": data["investment"],
+            "data_since": data["data_since"],
+            "daily_average": data["daily_average"],
+            "month_total": data["month"]["total"],
+            "month_forecast": data["month_forecast"],
+            "today_total": data["today"]["total"],
+            "avg_price": data["avg_price"],
+            "years_to_breakeven": data["years_to_breakeven"],
+            "projection_provisional": data["projection_provisional"],
+        }

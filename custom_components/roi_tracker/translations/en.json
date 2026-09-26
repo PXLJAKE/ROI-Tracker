@@ -2,152 +2,159 @@
   "config": {
     "step": {
       "user": {
-        "title": "ROI Tracker – add an asset",
-        "description": "Pick a template. It determines which fields are offered next.",
+        "title": "ROI Tracker – add PV system",
+        "description": "Calculates how much you save by using your own PV power and earn by feeding into the grid – and when the system has paid for itself. Calculated hourly from Home Assistant long-term statistics, also retroactively from the start date.",
         "data": {
-          "template": "Template"
-        }
-      },
-      "setup": {
-        "title": "Set up asset",
-        "description": "Enter the investment and your existing sensors. Amount sensors must be **cumulative meter readings** (kWh), not instantaneous power (kW). Leave fields you don't have empty.",
-        "data": {
-          "name": "Asset name",
-          "investment": "Investment cost",
-          "start_date": "Start date (optional, can be in the past)",
-          "consumption_sensor": "PV self-consumption (kWh, cumulative)",
-          "export_sensor": "Exported to grid (kWh, cumulative)",
-          "battery_discharge_sensor": "Discharged from battery (kWh, cumulative) – optional",
-          "grid_import_sensor": "Grid import (kWh, cumulative) – optional",
-          "price_mode": "Where does your electricity price (import) come from?",
-          "baseline_rate": "Baseline cost of the old solution (€/kWh)",
-          "reward_mode": "Where does your feed-in tariff come from?",
-          "sensor_reset_daily": "Sensors reset daily or monthly"
-        },
-        "data_description": {
-          "investment": "One-time investment in € that should pay off (e.g. 20000).",
-          "start_date": "Optionally a date in the past. The calculation starts retroactively from that day using stored sensor history.",
-          "consumption_sensor": "Electricity used directly from PV in kWh – NOT grid import. Important: if you set a battery sensor below, this value must NOT include battery discharge, otherwise it is counted twice. Savings = this × electricity price.",
-          "export_sensor": "Energy exported to the grid in kWh. Revenue = this × feed-in tariff.",
-          "battery_discharge_sensor": "Energy discharged from battery in kWh. Counted as savings and shown separately. Leave empty if your self-consumption sensor already includes the battery.",
-          "grid_import_sensor": "Optional: cumulative grid import in kWh (e.g. from Tibber or smart meter). NOT subtracted from ROI – shown transparently so you can see how much you still buy from the grid.",
-          "price_mode": "Determines how the monetary value of your self-consumption is calculated.",
-          "baseline_rate": "What one kWh would have cost you with the old solution. Savings are the difference to the current price.",
-          "sensor_reset_daily": "Enable if your sensors reset daily (e.g. daily yield from inverter) or monthly instead of accumulating permanently. On detecting a reset, the current value is counted as the partial day's energy."
-        }
-      },
-      "sources": {
-        "title": "Prices & feed-in",
-        "description": "Enter the values matching your selection. Prices always in **€ per kWh** (e.g. 0.30).",
-        "data": {
+          "name": "Name",
+          "investment": "Investment",
+          "start_date": "Commissioning / start date",
+          "calc_mode": "How is self-consumption determined?",
+          "price_sensor": "Dynamic electricity price (sensor)",
           "price_fixed": "Fixed electricity price (€/kWh)",
-          "price_sensor": "Electricity price sensor (€/kWh, e.g. Tibber)",
-          "cost_sensor": "Sensor: € value of savings (cumulative)",
-          "reward_fixed": "Fixed feed-in tariff (€/kWh)",
-          "reward_sensor": "Sensor: feed-in revenue in € (cumulative)"
+          "reward_fixed": "Feed-in tariff (€/kWh)"
         },
         "data_description": {
-          "price_fixed": "Your energy price per kWh, e.g. 0.30.",
-          "price_sensor": "A sensor providing the current energy price in €/kWh (e.g. Tibber). Each self-used kWh is valued at the price at that moment.",
-          "cost_sensor": "Only choose this if you have a sensor accumulating the saved amount in €. NOT your electricity bill – that would be expenses, not savings.",
-          "reward_fixed": "Your feed-in tariff per kWh, e.g. 0.082.",
-          "reward_sensor": "A sensor accumulating the feed-in revenue received in €."
+          "investment": "Total cost of the system that should pay off.",
+          "start_date": "Calculation starts on this day – also in the past, as far as HA has statistics.",
+          "price_sensor": "E.g. Tibber, aWATTar or EPEX price. Unit €/kWh, ct/kWh or €/MWh is detected automatically. Prefer a sensor with long-term statistics (state_class); otherwise the retroactive calculation is only hourly-accurate for the last ~10 days.",
+          "price_fixed": "Your energy price, e.g. 0.32. With a price sensor it is only used for periods without price data.",
+          "reward_fixed": "E.g. 0.082 for 8.2 ct/kWh. 0 if you get no feed-in tariff."
+        }
+      },
+      "sensors_house": {
+        "title": "Sensors: house consumption & grid import",
+        "description": "Savings per hour = (house consumption − grid import) × price. A battery is automatically handled correctly. All sensors must be cumulative kWh meters (as in the energy dashboard).",
+        "data": {
+          "consumption_sensor": "Total house consumption (kWh)",
+          "grid_import_sensor": "Grid import (kWh)",
+          "export_sensor": "Grid export (kWh)"
+        },
+        "data_description": {
+          "consumption_sensor": "Total power consumption of the house – from PV, battery or grid.",
+          "export_sensor": "Optional – required for feed-in revenue."
+        }
+      },
+      "sensors_pv": {
+        "title": "Sensors: PV production & export",
+        "description": "Self-consumption per hour = PV production − export + battery discharge − battery charge. All sensors must be cumulative kWh meters (as in the energy dashboard).",
+        "data": {
+          "production_sensor": "PV production (kWh)",
+          "export_sensor": "Grid export (kWh)",
+          "battery_charge_sensor": "Battery charged (kWh)",
+          "battery_discharge_sensor": "Battery discharged (kWh)"
+        },
+        "data_description": {
+          "battery_charge_sensor": "Optional – only together with “battery discharged”.",
+          "battery_discharge_sensor": "Optional – only together with “battery charged”."
+        }
+      },
+      "sensors_direct": {
+        "title": "Sensors: ready-made self-consumption",
+        "description": "For systems that measure self-consumption directly. Savings per hour = (self-consumption + battery discharge) × price.",
+        "data": {
+          "consumption_sensor": "PV self-consumption (kWh)",
+          "battery_discharge_sensor": "Battery discharged (kWh)",
+          "export_sensor": "Grid export (kWh)"
+        },
+        "data_description": {
+          "consumption_sensor": "PV power used directly – NOT house consumption and NOT grid import.",
+          "battery_discharge_sensor": "Optional – only if self-consumption does NOT already include the battery."
         }
       }
     },
-    "abort": {
-      "already_configured": "This asset is already configured."
+    "error": {
+      "price_required": "Please enter a price sensor or a fixed electricity price.",
+      "no_state_class": "This sensor has no long-term statistics (state_class missing) and cannot be used.",
+      "duplicate_sensor": "Each sensor may only be selected once.",
+      "battery_pair": "Please provide battery charged and battery discharged together (or leave both empty)."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Edit asset",
-        "description": "Adjust investment, sensors and price sources.",
+        "title": "Edit system",
+        "description": "Changing the start date, sensors or prices automatically triggers a full recalculation.",
         "data": {
-          "name": "Asset name",
-          "investment": "Investment cost",
-          "start_date": "Start date (optional, can be in the past)",
-          "consumption_sensor": "PV self-consumption (kWh, cumulative)",
-          "export_sensor": "Exported to grid (kWh, cumulative)",
-          "battery_discharge_sensor": "Discharged from battery (kWh, cumulative) – optional",
-          "grid_import_sensor": "Grid import (kWh, cumulative) – optional",
-          "price_mode": "Where does your electricity price (import) come from?",
-          "baseline_rate": "Baseline cost of the old solution (€/kWh)",
-          "reward_mode": "Where does your feed-in tariff come from?",
-          "sensor_reset_daily": "Sensors reset daily or monthly"
+          "name": "Name",
+          "investment": "Investment",
+          "start_date": "Commissioning / start date",
+          "calc_mode": "How is self-consumption determined?",
+          "price_sensor": "Dynamic electricity price (sensor)",
+          "price_fixed": "Fixed electricity price (€/kWh)",
+          "reward_fixed": "Feed-in tariff (€/kWh)"
         },
         "data_description": {
-          "consumption_sensor": "Direct PV self-consumption – NOT grid import. Do not include battery discharge if a battery sensor is set.",
-          "grid_import_sensor": "Optional: cumulative grid import (display only, not deducted from ROI).",
-          "sensor_reset_daily": "Enable if sensors reset daily or monthly."
+          "price_sensor": "Unit €/kWh, ct/kWh or €/MWh is detected automatically.",
+          "price_fixed": "With a price sensor it is only used for periods without price data."
         }
       },
-      "sources": {
-        "title": "Prices & feed-in",
-        "description": "Enter the values matching your selection.",
+      "sensors_house": {
+        "title": "Sensors: house consumption & grid import",
+        "description": "Savings per hour = (house consumption − grid import) × price.",
         "data": {
-          "price_fixed": "Fixed electricity price (€/kWh)",
-          "price_sensor": "Electricity price sensor (€/kWh, e.g. Tibber)",
-          "cost_sensor": "Sensor: € value of savings (cumulative)",
-          "reward_fixed": "Fixed feed-in tariff (€/kWh)",
-          "reward_sensor": "Sensor: feed-in revenue in € (cumulative)"
-        },
-        "data_description": {
-          "price_sensor": "Sensor with the current energy price in €/kWh (e.g. Tibber).",
-          "cost_sensor": "Only a sensor accumulating the saved amount in € – not the electricity bill."
+          "consumption_sensor": "Total house consumption (kWh)",
+          "grid_import_sensor": "Grid import (kWh)",
+          "export_sensor": "Grid export (kWh)"
+        }
+      },
+      "sensors_pv": {
+        "title": "Sensors: PV production & export",
+        "description": "Self-consumption per hour = PV production − export + battery discharge − battery charge.",
+        "data": {
+          "production_sensor": "PV production (kWh)",
+          "export_sensor": "Grid export (kWh)",
+          "battery_charge_sensor": "Battery charged (kWh)",
+          "battery_discharge_sensor": "Battery discharged (kWh)"
+        }
+      },
+      "sensors_direct": {
+        "title": "Sensors: ready-made self-consumption",
+        "description": "Savings per hour = (self-consumption + battery discharge) × price.",
+        "data": {
+          "consumption_sensor": "PV self-consumption (kWh)",
+          "battery_discharge_sensor": "Battery discharged (kWh)",
+          "export_sensor": "Grid export (kWh)"
         }
       }
+    },
+    "error": {
+      "price_required": "Please enter a price sensor or a fixed electricity price.",
+      "no_state_class": "This sensor has no long-term statistics (state_class missing) and cannot be used.",
+      "duplicate_sensor": "Each sensor may only be selected once.",
+      "battery_pair": "Please provide battery charged and battery discharged together (or leave both empty)."
     }
   },
   "selector": {
-    "template": {
+    "calc_mode": {
       "options": {
-        "pv": "PV system (with battery)",
-        "custom": "Custom"
-      }
-    },
-    "price_mode": {
-      "options": {
-        "fixed": "Fixed price (€/kWh)",
-        "sensor": "Dynamic price sensor (€/kWh, e.g. Tibber)",
-        "cost_sensor": "Ready-made € value sensor",
-        "none": "None"
+        "house": "House consumption − grid import (recommended)",
+        "pv": "PV production − export (± battery)",
+        "direct": "I have a ready-made self-consumption sensor"
       }
     }
   },
   "entity": {
     "sensor": {
       "total_return": { "name": "Total return" },
-      "savings": { "name": "Savings (self-consumption)" },
-      "battery_savings": { "name": "Savings (battery)" },
+      "savings": { "name": "Savings" },
       "revenue": { "name": "Feed-in revenue" },
-      "remaining_investment": { "name": "Remaining investment" },
+      "remaining_investment": { "name": "Remaining amount" },
       "amortization": { "name": "Amortization" },
       "roi_percent": { "name": "ROI" },
-      "breakeven_days": { "name": "Days to break-even" },
-      "self_sufficiency": { "name": "Self-consumption rate" },
-      "daily_average": { "name": "Daily avg. return" },
-      "monthly_estimate": { "name": "Monthly estimate" },
-      "grid_import_cost": { "name": "Grid import (cost)" },
-      "total_consumption_kwh": { "name": "Total self-consumption (kWh)" },
-      "total_export_kwh": { "name": "Total export (kWh)" },
-      "total_battery_discharge_kwh": { "name": "Total battery discharge (kWh)" },
-      "grid_import_kwh": { "name": "Total grid import (kWh)" }
+      "yearly_estimate": { "name": "Yearly estimate" },
+      "breakeven_date": { "name": "Break-even date" },
+      "total_consumption_kwh": { "name": "Total self-consumption" },
+      "total_export_kwh": { "name": "Total export" }
     }
   },
   "services": {
-    "reset": {
-      "name": "Reset",
-      "description": "Resets a ROI calculator to zero. All accumulated values and the stored state are cleared."
-    },
     "recalculate": {
-      "name": "Recalculate retroactively",
-      "description": "Resets a ROI calculator and recalculates it retroactively from the stored sensor history.",
+      "name": "Recalculate",
+      "description": "Fully recalculates a system from long-term statistics – optionally from a new start date.",
       "fields": {
         "start_date": {
           "name": "Start date",
-          "description": "Date to calculate from (optional; otherwise the start date configured on the asset)."
+          "description": "Optional: new start date (saved in the system configuration)."
         }
       }
     }

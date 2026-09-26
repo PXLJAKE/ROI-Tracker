@@ -1,27 +1,10 @@
-reset:
-  name: Zurücksetzen
-  description: >-
-    Setzt einen ROI-Rechner auf null zurück (alle kumulierten Werte und der
-    gespeicherte Zustand werden gelöscht). Die Berechnung startet danach neu.
-  target:
-    entity:
-      integration: roi_tracker
-      domain: sensor
-
 recalculate:
-  name: Rückwirkend neu berechnen
-  description: >-
-    Setzt einen ROI-Rechner zurück und berechnet ihn rückwirkend aus der
-    gespeicherten Sensor-Historie neu – ab dem angegebenen Datum oder, falls
-    keines angegeben ist, ab dem in der Anlage konfigurierten Startdatum.
   target:
     entity:
       integration: roi_tracker
       domain: sensor
   fields:
     start_date:
-      name: Startdatum
-      description: Datum, ab dem rückwirkend gerechnet werden soll (optional).
       required: false
       example: "2025-01-01"
       selector:

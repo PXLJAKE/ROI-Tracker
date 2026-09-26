@@ -1,10 +1,8 @@
 """Config- und Options-Flow für ROI Tracker.
 
-Mehrstufiger Dialog, damit immer nur die wirklich benötigten Felder erscheinen:
-
-  1. Vorlage wählen (PV / Benutzerdefiniert)
-  2. Grunddaten: Name, Investition, Startdatum, Mengen-Sensoren, Modus-Auswahl
-  3. Quellen-Details: passender Preis-/Vergütungs-Wert
+Zwei Schritte:
+  1. Grunddaten: Name, Investition, Startdatum, Berechnungsart, Preise
+  2. Energie-Sensoren passend zur Berechnungsart
 """
 
 from __future__ import annotations
@@ -19,216 +17,179 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
     OptionsFlow,
 )
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import selector
+from homeassistant.util import dt as dt_util
 
 from .const import (
-    CONF_BASELINE_RATE,
+    CONF_BATTERY_CHARGE_SENSOR,
     CONF_BATTERY_DISCHARGE_SENSOR,
-    CONF_CONSUMPTION_SENSOR,
-    CONF_COST_SENSOR,
-    CONF_EXPORT_SENSOR,
-    CONF_GRID_IMPORT_SENSOR,
+    CONF_FEED_IN_TARIFF,
     CONF_INVESTMENT,
+    CONF_MODE,
     CONF_NAME,
     CONF_PRICE_FIXED,
-    CONF_PRICE_MODE,
     CONF_PRICE_SENSOR,
-    CONF_REWARD_FIXED,
-    CONF_REWARD_MODE,
-    CONF_REWARD_SENSOR,
-    CONF_SENSOR_RESET_DAILY,
     CONF_START_DATE,
-    CONF_TEMPLATE,
     DOMAIN,
-    PRICE_MODE_COST_SENSOR,
-    PRICE_MODE_FIXED,
-    PRICE_MODE_NONE,
-    PRICE_MODE_SENSOR,
-    TEMPLATE_DEFAULTS,
-    TEMPLATES,
+    ENERGY_SENSOR_KEYS,
+    MODE_HOUSE,
+    MODE_SENSORS,
+    MODES,
 )
-
-# ── Selektoren ────────────────────────────────────────────────────────────────
 
 _ENERGY_SENSOR = selector.EntitySelector(
-    selector.EntitySelectorConfig(domain="sensor")
+    selector.EntitySelectorConfig(domain="sensor", device_class="energy")
 )
-_MONEY_SENSOR = selector.EntitySelector(
-    selector.EntitySelectorConfig(domain="sensor", device_class="monetary")
+_PRICE_SENSOR = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain=["sensor", "input_number"])
 )
-_ANY_SENSOR = selector.EntitySelector(
-    selector.EntitySelectorConfig(domain="sensor")
-)
-_PRICE_PER_UNIT = selector.NumberSelector(
+_PRICE = selector.NumberSelector(
     selector.NumberSelectorConfig(
         min=0, step="any", mode=selector.NumberSelectorMode.BOX,
         unit_of_measurement="€/kWh",
     )
 )
-_INVEST_SELECTOR = selector.NumberSelector(
+_EURO = selector.NumberSelector(
     selector.NumberSelectorConfig(
         min=0, step=0.01, mode=selector.NumberSelectorMode.BOX, unit_of_measurement="€"
     )
 )
-
-
-def _price_mode_selector(include_cost: bool, include_none: bool) -> selector.Selector:
-    options = [PRICE_MODE_FIXED, PRICE_MODE_SENSOR]
-    if include_cost:
-        options.append(PRICE_MODE_COST_SENSOR)
-    if include_none:
-        options.append(PRICE_MODE_NONE)
-    return selector.SelectSelector(
-        selector.SelectSelectorConfig(
-            options=options,
-            translation_key="price_mode",
-            mode=selector.SelectSelectorMode.LIST,
-        )
+_MODE = selector.SelectSelector(
+    selector.SelectSelectorConfig(
+        options=MODES, translation_key="calc_mode", mode=selector.SelectSelectorMode.LIST
     )
+)
 
-
-def _template_selector() -> selector.Selector:
-    return selector.SelectSelector(
-        selector.SelectSelectorConfig(
-            options=list(TEMPLATES),
-            translation_key="template",
-            mode=selector.SelectSelectorMode.LIST,
-        )
-    )
+BASIC_KEYS = (
+    CONF_NAME, CONF_INVESTMENT, CONF_START_DATE, CONF_MODE,
+    CONF_PRICE_SENSOR, CONF_PRICE_FIXED, CONF_FEED_IN_TARIFF,
+)
 
 
 def _opt(key: str, defaults: dict[str, Any]) -> vol.Optional:
-    if key in defaults and defaults[key] not in (None, ""):
+    if defaults.get(key) not in (None, ""):
         return vol.Optional(key, default=defaults[key])
     return vol.Optional(key)
 
 
-def _req(key: str, defaults: dict[str, Any], fallback: Any) -> vol.Required:
-    return vol.Required(key, default=defaults.get(key, fallback))
-
-
-def _schema_setup(template: str, defaults: dict[str, Any]) -> vol.Schema:
-    """Schritt 2: Grunddaten, Mengen-Sensoren und Modus-Auswahl."""
-    tpl = TEMPLATE_DEFAULTS.get(template, TEMPLATE_DEFAULTS["custom"])
-    fields: list[str] = tpl["fields"]
-    has_reward: bool = tpl.get("has_reward", False)
-    has_baseline: bool = tpl.get("has_baseline", False)
-
-    schema: dict[Any, Any] = {
-        _req(CONF_NAME, defaults, ""): selector.TextSelector(),
-        _req(CONF_INVESTMENT, defaults, 0): _INVEST_SELECTOR,
-        _opt(CONF_START_DATE, defaults): selector.DateSelector(),
-    }
-
-    if CONF_CONSUMPTION_SENSOR in fields:
-        schema[_opt(CONF_CONSUMPTION_SENSOR, defaults)] = _ENERGY_SENSOR
-    if CONF_EXPORT_SENSOR in fields:
-        schema[_opt(CONF_EXPORT_SENSOR, defaults)] = _ENERGY_SENSOR
-    if CONF_BATTERY_DISCHARGE_SENSOR in fields:
-        schema[_opt(CONF_BATTERY_DISCHARGE_SENSOR, defaults)] = _ENERGY_SENSOR
-    if CONF_GRID_IMPORT_SENSOR in fields:
-        schema[_opt(CONF_GRID_IMPORT_SENSOR, defaults)] = _ENERGY_SENSOR
-
-    schema[_req(CONF_PRICE_MODE, defaults, PRICE_MODE_FIXED)] = _price_mode_selector(
-        include_cost=True, include_none=False
+def _schema_basic(defaults: dict[str, Any]) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(CONF_NAME, default=defaults.get(CONF_NAME, "PV-Anlage")):
+                selector.TextSelector(),
+            vol.Required(CONF_INVESTMENT, default=defaults.get(CONF_INVESTMENT, 0)): _EURO,
+            vol.Required(
+                CONF_START_DATE,
+                default=defaults.get(CONF_START_DATE) or dt_util.now().date().isoformat(),
+            ): selector.DateSelector(),
+            vol.Required(CONF_MODE, default=defaults.get(CONF_MODE, MODE_HOUSE)): _MODE,
+            _opt(CONF_PRICE_SENSOR, defaults): _PRICE_SENSOR,
+            _opt(CONF_PRICE_FIXED, defaults): _PRICE,
+            vol.Required(
+                CONF_FEED_IN_TARIFF, default=defaults.get(CONF_FEED_IN_TARIFF) or 0
+            ): _PRICE,
+        }
     )
 
-    if has_baseline:
-        schema[_opt(CONF_BASELINE_RATE, defaults)] = _PRICE_PER_UNIT
 
-    if has_reward:
-        schema[_req(CONF_REWARD_MODE, defaults, PRICE_MODE_FIXED)] = (
-            _price_mode_selector(include_cost=False, include_none=True)
-        )
-
-    # Sensor-Typ: täglich/monatlich rücksetzend oder dauerhaft kumulativ
-    schema[_req(CONF_SENSOR_RESET_DAILY, defaults, False)] = selector.BooleanSelector()
-
-    return vol.Schema(schema)
-
-
-def _schema_sources(
-    price_mode: str,
-    reward_mode: str | None,
-    defaults: dict[str, Any],
-) -> vol.Schema:
-    """Schritt 3: nur die zum gewählten Modus passenden Wertfelder."""
+def _schema_sensors(mode: str, defaults: dict[str, Any]) -> vol.Schema:
     schema: dict[Any, Any] = {}
-
-    if price_mode == PRICE_MODE_FIXED:
-        schema[_opt(CONF_PRICE_FIXED, defaults)] = _PRICE_PER_UNIT
-    elif price_mode == PRICE_MODE_SENSOR:
-        schema[_opt(CONF_PRICE_SENSOR, defaults)] = _ANY_SENSOR
-    elif price_mode == PRICE_MODE_COST_SENSOR:
-        schema[_opt(CONF_COST_SENSOR, defaults)] = _MONEY_SENSOR
-
-    if reward_mode == PRICE_MODE_FIXED:
-        schema[_opt(CONF_REWARD_FIXED, defaults)] = _PRICE_PER_UNIT
-    elif reward_mode == PRICE_MODE_SENSOR:
-        schema[_opt(CONF_REWARD_SENSOR, defaults)] = _MONEY_SENSOR
-
+    for key, required in MODE_SENSORS[mode]:
+        if required:
+            marker = (
+                vol.Required(key, default=defaults[key]) if defaults.get(key)
+                else vol.Required(key)
+            )
+        else:
+            marker = _opt(key, defaults)
+        schema[marker] = _ENERGY_SENSOR
     return vol.Schema(schema)
 
 
-def _needs_sources_step(price_mode: str, reward_mode: str | None) -> bool:
-    has_price = price_mode in (PRICE_MODE_FIXED, PRICE_MODE_SENSOR, PRICE_MODE_COST_SENSOR)
-    has_reward = reward_mode in (PRICE_MODE_FIXED, PRICE_MODE_SENSOR)
-    return has_price or has_reward
+def _validate_basic(user_input: dict[str, Any]) -> dict[str, str]:
+    if not user_input.get(CONF_PRICE_SENSOR) and user_input.get(CONF_PRICE_FIXED) in (None, ""):
+        return {"base": "price_required"}
+    return {}
 
 
-# ── Config Flow ───────────────────────────────────────────────────────────────
+def _validate_sensors(hass: HomeAssistant, mode: str, user_input: dict[str, Any]) -> dict[str, str]:
+    errors: dict[str, str] = {}
+    chosen = [user_input.get(k) for k, _ in MODE_SENSORS[mode] if user_input.get(k)]
+    if len(chosen) != len(set(chosen)):
+        return {"base": "duplicate_sensor"}
+    for key, _ in MODE_SENSORS[mode]:
+        entity_id = user_input.get(key)
+        if not entity_id:
+            continue
+        state = hass.states.get(entity_id)
+        if state is not None and not state.attributes.get("state_class"):
+            errors[key] = "no_state_class"
+    has_charge = bool(user_input.get(CONF_BATTERY_CHARGE_SENSOR))
+    has_discharge = bool(user_input.get(CONF_BATTERY_DISCHARGE_SENSOR))
+    if any(k == CONF_BATTERY_CHARGE_SENSOR for k, _ in MODE_SENSORS[mode]) and (
+        has_charge != has_discharge
+    ):
+        errors["base"] = "battery_pair"
+    return errors
+
+
+def _full_config(basic: dict[str, Any], sensors: dict[str, Any]) -> dict[str, Any]:
+    """Alle Schlüssel explizit setzen – geleerte Felder werden zu None.
+
+    Wichtig für den Options-Flow: sonst würde ein gelöschtes optionales Feld
+    auf den alten Wert aus ``entry.data`` zurückfallen.
+    """
+    mode = basic[CONF_MODE]
+    allowed = {k for k, _ in MODE_SENSORS[mode]}
+    data = {k: basic.get(k) for k in BASIC_KEYS}
+    data.update({k: (sensors.get(k) if k in allowed else None) for k in ENERGY_SENSOR_KEYS})
+    return data
+
 
 class RoiTrackerConfigFlow(ConfigFlow, domain=DOMAIN):
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self) -> None:
-        self._template: str | None = None
-        self._data: dict[str, Any] = {}
+        self._basic: dict[str, Any] = {}
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
         if user_input is not None:
-            self._template = user_input[CONF_TEMPLATE]
-            return await self.async_step_setup()
+            errors = _validate_basic(user_input)
+            if not errors:
+                self._basic = user_input
+                return await self.async_step_sensors()
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema(
-                {vol.Required(CONF_TEMPLATE, default=TEMPLATES[0]): _template_selector()}
-            ),
+            data_schema=_schema_basic(user_input or {}),
+            errors=errors,
         )
 
-    async def async_step_setup(
+    async def async_step_sensors(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        assert self._template is not None
+        mode = self._basic[CONF_MODE]
+        errors: dict[str, str] = {}
         if user_input is not None:
-            self._data = {CONF_TEMPLATE: self._template, **user_input}
-            if _needs_sources_step(
-                user_input.get(CONF_PRICE_MODE, PRICE_MODE_FIXED),
-                user_input.get(CONF_REWARD_MODE),
-            ):
-                return await self.async_step_sources()
-            return self.async_create_entry(title=self._data[CONF_NAME], data=self._data)
+            errors = _validate_sensors(self.hass, mode, user_input)
+            if not errors:
+                return self.async_create_entry(
+                    title=self._basic[CONF_NAME],
+                    data=_full_config(self._basic, user_input),
+                )
         return self.async_show_form(
-            step_id="setup",
-            data_schema=_schema_setup(self._template, {}),
+            step_id=f"sensors_{mode}",
+            data_schema=_schema_sensors(mode, user_input or {}),
+            errors=errors,
         )
 
-    async def async_step_sources(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        assert self._template is not None
-        price_mode = self._data.get(CONF_PRICE_MODE, PRICE_MODE_FIXED)
-        reward_mode = self._data.get(CONF_REWARD_MODE)
-        if user_input is not None:
-            self._data.update(user_input)
-            return self.async_create_entry(title=self._data[CONF_NAME], data=self._data)
-        return self.async_show_form(
-            step_id="sources",
-            data_schema=_schema_sources(price_mode, reward_mode, {}),
-        )
+    # Jede Berechnungsart hat eigene Texte → eigene step_ids, gleiche Logik.
+    async_step_sensors_house = async_step_sensors
+    async_step_sensors_pv = async_step_sensors
+    async_step_sensors_direct = async_step_sensors
 
     @staticmethod
     @callback
@@ -236,15 +197,9 @@ class RoiTrackerConfigFlow(ConfigFlow, domain=DOMAIN):
         return RoiTrackerOptionsFlow()
 
 
-# ── Options Flow ──────────────────────────────────────────────────────────────
-
 class RoiTrackerOptionsFlow(OptionsFlow):
     def __init__(self) -> None:
-        self._data: dict[str, Any] = {}
-
-    @property
-    def _template(self) -> str:
-        return self.config_entry.data.get(CONF_TEMPLATE, "custom")
+        self._basic: dict[str, Any] = {}
 
     @property
     def _current(self) -> dict[str, Any]:
@@ -253,28 +208,39 @@ class RoiTrackerOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
         if user_input is not None:
-            self._data = dict(user_input)
-            if _needs_sources_step(
-                user_input.get(CONF_PRICE_MODE, PRICE_MODE_FIXED),
-                user_input.get(CONF_REWARD_MODE),
-            ):
-                return await self.async_step_sources()
-            return self.async_create_entry(title="", data=self._data)
+            errors = _validate_basic(user_input)
+            if not errors:
+                self._basic = user_input
+                return await self.async_step_sensors()
         return self.async_show_form(
             step_id="init",
-            data_schema=_schema_setup(self._template, self._current),
+            data_schema=_schema_basic(user_input or self._current),
+            errors=errors,
         )
 
-    async def async_step_sources(
+    async def async_step_sensors(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        price_mode = self._data.get(CONF_PRICE_MODE, PRICE_MODE_FIXED)
-        reward_mode = self._data.get(CONF_REWARD_MODE)
+        mode = self._basic[CONF_MODE]
+        errors: dict[str, str] = {}
         if user_input is not None:
-            self._data.update(user_input)
-            return self.async_create_entry(title="", data=self._data)
+            errors = _validate_sensors(self.hass, mode, user_input)
+            if not errors:
+                if self._basic[CONF_NAME] != self.config_entry.title:
+                    self.hass.config_entries.async_update_entry(
+                        self.config_entry, title=self._basic[CONF_NAME]
+                    )
+                return self.async_create_entry(
+                    title="", data=_full_config(self._basic, user_input)
+                )
         return self.async_show_form(
-            step_id="sources",
-            data_schema=_schema_sources(price_mode, reward_mode, self._current),
+            step_id=f"sensors_{mode}",
+            data_schema=_schema_sensors(mode, user_input or self._current),
+            errors=errors,
         )
+
+    async_step_sensors_house = async_step_sensors
+    async_step_sensors_pv = async_step_sensors
+    async_step_sensors_direct = async_step_sensors
