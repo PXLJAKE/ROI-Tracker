@@ -31,7 +31,8 @@
         },
         "data_description": {
           "consumption_sensor": "Total power consumption of the house – from PV, battery or grid.",
-          "export_sensor": "Optional – required for feed-in revenue."
+          "export_sensor": "Energy fed into the grid (export meter). Optional – required for feed-in revenue. In the energy dashboard: Electricity grid → Return to grid.",
+          "grid_import_sensor": "Energy bought from the grid – the import meter, NOT the export. In the energy dashboard: Electricity grid → Grid consumption."
         }
       },
       "sensors_pv": {
@@ -95,6 +96,10 @@
           "consumption_sensor": "Total house consumption (kWh)",
           "grid_import_sensor": "Grid import (kWh)",
           "export_sensor": "Grid export (kWh)"
+        },
+        "data_description": {
+          "grid_import_sensor": "Energy bought from the grid – the import meter, NOT the export. In the energy dashboard: Electricity grid → Grid consumption.",
+          "export_sensor": "Energy fed into the grid (export meter). Optional – required for feed-in revenue. In the energy dashboard: Electricity grid → Return to grid."
         }
       },
       "sensors_pv": {
@@ -135,16 +140,36 @@
   },
   "entity": {
     "sensor": {
-      "total_return": { "name": "Total return" },
-      "savings": { "name": "Savings" },
-      "revenue": { "name": "Feed-in revenue" },
-      "remaining_investment": { "name": "Remaining amount" },
-      "amortization": { "name": "Amortization" },
-      "roi_percent": { "name": "ROI" },
-      "yearly_estimate": { "name": "Yearly estimate" },
-      "breakeven_date": { "name": "Break-even date" },
-      "total_consumption_kwh": { "name": "Total self-consumption" },
-      "total_export_kwh": { "name": "Total export" }
+      "total_return": {
+        "name": "Total return"
+      },
+      "savings": {
+        "name": "Savings"
+      },
+      "revenue": {
+        "name": "Feed-in revenue"
+      },
+      "remaining_investment": {
+        "name": "Remaining amount"
+      },
+      "amortization": {
+        "name": "Amortization"
+      },
+      "roi_percent": {
+        "name": "ROI"
+      },
+      "yearly_estimate": {
+        "name": "Yearly estimate"
+      },
+      "breakeven_date": {
+        "name": "Break-even date"
+      },
+      "total_consumption_kwh": {
+        "name": "Total self-consumption"
+      },
+      "total_export_kwh": {
+        "name": "Total export"
+      }
     }
   },
   "services": {
