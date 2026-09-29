@@ -111,11 +111,17 @@ async def _register_lovelace_resource(hass: HomeAssistant, url: str) -> bool:
     """
     try:
         from homeassistant.components.lovelace.resources import ResourceStorageCollection
-        resources = hass.data.get("lovelace", {}).get("resources")
+
+        # Neuere HA-Versionen speichern hier ein LovelaceData-Objekt (Attribut
+        # ``resources``), ältere ein dict.
+        lovelace = hass.data.get("lovelace")
+        resources = getattr(lovelace, "resources", None)
+        if resources is None and isinstance(lovelace, dict):
+            resources = lovelace.get("resources")
         if not isinstance(resources, ResourceStorageCollection):
-            _LOGGER.debug(
-                "Lovelace-Resource-Storage nicht verfügbar (YAML-Modus?). "
-                "Karte manuell als Ressource eintragen: %s", url,
+            _LOGGER.info(
+                "Dashboard-Ressourcen im YAML-Modus – bitte die Karte manuell als "
+                "JavaScript-Modul eintragen: %s", url,
             )
             return False
 
@@ -145,5 +151,8 @@ async def _register_lovelace_resource(hass: HomeAssistant, url: str) -> bool:
         _LOGGER.info("ROI-Tracker-Karten-Ressource angelegt: %s", url)
         return True
     except Exception as err:  # noqa: BLE001
-        _LOGGER.debug("Lovelace-Resource-Storage Fehler: %s", err)
+        _LOGGER.warning(
+            "Karte konnte nicht als Dashboard-Ressource eingetragen werden (%s). "
+            "Bitte manuell als JavaScript-Modul eintragen: %s", err, url,
+        )
         return False

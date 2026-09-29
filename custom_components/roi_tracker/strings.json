@@ -31,7 +31,8 @@
         },
         "data_description": {
           "consumption_sensor": "Gesamter Stromverbrauch des Hauses – egal ob aus PV, Batterie oder Netz.",
-          "export_sensor": "Optional – nötig für den Einspeiseertrag."
+          "export_sensor": "Ins Netz eingespeiste Energie (Export-Zähler). Optional – nötig für den Einspeiseertrag. Im Energie-Dashboard: Stromnetz → Netzeinspeisung.",
+          "grid_import_sensor": "Aus dem Netz gekaufte Energie – der Import-/Bezugszähler, NICHT die Einspeisung. Im Energie-Dashboard: Stromnetz → Netzbezug."
         }
       },
       "sensors_pv": {
@@ -95,6 +96,10 @@
           "consumption_sensor": "Hausverbrauch gesamt (kWh)",
           "grid_import_sensor": "Netzbezug (kWh)",
           "export_sensor": "Einspeisung (kWh)"
+        },
+        "data_description": {
+          "grid_import_sensor": "Aus dem Netz gekaufte Energie – der Import-/Bezugszähler, NICHT die Einspeisung. Im Energie-Dashboard: Stromnetz → Netzbezug.",
+          "export_sensor": "Ins Netz eingespeiste Energie (Export-Zähler). Optional – nötig für den Einspeiseertrag. Im Energie-Dashboard: Stromnetz → Netzeinspeisung."
         }
       },
       "sensors_pv": {
@@ -135,16 +140,36 @@
   },
   "entity": {
     "sensor": {
-      "total_return": { "name": "Gesamtertrag" },
-      "savings": { "name": "Ersparnis" },
-      "revenue": { "name": "Einspeiseertrag" },
-      "remaining_investment": { "name": "Offener Restbetrag" },
-      "amortization": { "name": "Amortisation" },
-      "roi_percent": { "name": "ROI" },
-      "yearly_estimate": { "name": "Jahresprognose" },
-      "breakeven_date": { "name": "Break-Even-Datum" },
-      "total_consumption_kwh": { "name": "Eigenverbrauch gesamt" },
-      "total_export_kwh": { "name": "Einspeisung gesamt" }
+      "total_return": {
+        "name": "Gesamtertrag"
+      },
+      "savings": {
+        "name": "Ersparnis"
+      },
+      "revenue": {
+        "name": "Einspeiseertrag"
+      },
+      "remaining_investment": {
+        "name": "Offener Restbetrag"
+      },
+      "amortization": {
+        "name": "Amortisation"
+      },
+      "roi_percent": {
+        "name": "ROI"
+      },
+      "yearly_estimate": {
+        "name": "Jahresprognose"
+      },
+      "breakeven_date": {
+        "name": "Break-Even-Datum"
+      },
+      "total_consumption_kwh": {
+        "name": "Eigenverbrauch gesamt"
+      },
+      "total_export_kwh": {
+        "name": "Einspeisung gesamt"
+      }
     }
   },
   "services": {
