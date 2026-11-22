@@ -7,6 +7,7 @@ Zwei Schritte:
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 import voluptuous as vol
@@ -30,6 +31,7 @@ from .const import (
     CONF_NAME,
     CONF_PRICE_FIXED,
     CONF_PRICE_SENSOR,
+    CONF_PRODUCTION_SENSOR,
     CONF_START_DATE,
     DOMAIN,
     ENERGY_SENSOR_KEYS,
@@ -41,6 +43,13 @@ from .const import (
 _ENERGY_SENSOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="sensor", device_class="energy")
 )
+# Mehrere PV-Strings / Wechselrichter werden addiert.
+_ENERGY_SENSOR_MULTI = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain="sensor", device_class="energy", multiple=True)
+)
+MULTI_KEYS = (CONF_PRODUCTION_SENSOR,)
+# So weit reicht die Zustands-Historie des Recorders standardmäßig zurück.
+HISTORY_DAYS = 10
 _PRICE_SENSOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain=["sensor", "input_number"])
 )
@@ -95,6 +104,11 @@ def _schema_basic(defaults: dict[str, Any]) -> vol.Schema:
 
 def _schema_sensors(mode: str, defaults: dict[str, Any]) -> vol.Schema:
     schema: dict[Any, Any] = {}
+    # Alte Einträge speichern die Erzeugung als einzelnen String.
+    defaults = {
+        **defaults,
+        **{k: _as_list(defaults.get(k)) for k in MULTI_KEYS if defaults.get(k)},
+    }
     for key, required in MODE_SENSORS[mode]:
         if required:
             marker = (
@@ -103,28 +117,46 @@ def _schema_sensors(mode: str, defaults: dict[str, Any]) -> vol.Schema:
             )
         else:
             marker = _opt(key, defaults)
-        schema[marker] = _ENERGY_SENSOR
+        schema[marker] = _ENERGY_SENSOR_MULTI if key in MULTI_KEYS else _ENERGY_SENSOR
     return vol.Schema(schema)
 
 
-def _validate_basic(user_input: dict[str, Any]) -> dict[str, str]:
-    if not user_input.get(CONF_PRICE_SENSOR) and user_input.get(CONF_PRICE_FIXED) in (None, ""):
+def _as_list(value: Any) -> list[str]:
+    if isinstance(value, (list, tuple)):
+        return [v for v in value if v]
+    return [value] if value else []
+
+
+def _validate_basic(hass: HomeAssistant, user_input: dict[str, Any]) -> dict[str, str]:
+    price_sensor = user_input.get(CONF_PRICE_SENSOR)
+    has_fixed = user_input.get(CONF_PRICE_FIXED) not in (None, "")
+    if not price_sensor and not has_fixed:
         return {"base": "price_required"}
+    # Preis-Sensor ohne Langzeitstatistik: Für Zeiträume vor der Zustands-
+    # Historie (~10 Tage) gibt es keinen Stundenpreis. Ohne Festpreis als
+    # Ersatz würde die Ersparnis dort mit 0 € gerechnet.
+    if price_sensor and not has_fixed:
+        state = hass.states.get(price_sensor)
+        start = dt_util.parse_date(str(user_input.get(CONF_START_DATE) or ""))
+        old_start = start is not None and start < dt_util.now().date() - timedelta(days=HISTORY_DAYS)
+        if state is not None and not state.attributes.get("state_class") and old_start:
+            return {CONF_PRICE_FIXED: "price_fallback_required"}
     return {}
 
 
 def _validate_sensors(hass: HomeAssistant, mode: str, user_input: dict[str, Any]) -> dict[str, str]:
     errors: dict[str, str] = {}
-    chosen = [user_input.get(k) for k, _ in MODE_SENSORS[mode] if user_input.get(k)]
+    chosen = [e for k, _ in MODE_SENSORS[mode] for e in _as_list(user_input.get(k))]
     if len(chosen) != len(set(chosen)):
         return {"base": "duplicate_sensor"}
-    for key, _ in MODE_SENSORS[mode]:
-        entity_id = user_input.get(key)
-        if not entity_id:
-            continue
-        state = hass.states.get(entity_id)
-        if state is not None and not state.attributes.get("state_class"):
-            errors[key] = "no_state_class"
+    for key, required in MODE_SENSORS[mode]:
+        entity_ids = _as_list(user_input.get(key))
+        if required and not entity_ids:
+            errors[key] = "sensor_required"
+        for entity_id in entity_ids:
+            state = hass.states.get(entity_id)
+            if state is not None and not state.attributes.get("state_class"):
+                errors[key] = "no_state_class"
     has_charge = bool(user_input.get(CONF_BATTERY_CHARGE_SENSOR))
     has_discharge = bool(user_input.get(CONF_BATTERY_DISCHARGE_SENSOR))
     if any(k == CONF_BATTERY_CHARGE_SENSOR for k, _ in MODE_SENSORS[mode]) and (
@@ -158,7 +190,7 @@ class RoiTrackerConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
-            errors = _validate_basic(user_input)
+            errors = _validate_basic(self.hass, user_input)
             if not errors:
                 self._basic = user_input
                 return await self.async_step_sensors()
@@ -210,7 +242,7 @@ class RoiTrackerOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
-            errors = _validate_basic(user_input)
+            errors = _validate_basic(self.hass, user_input)
             if not errors:
                 self._basic = user_input
                 return await self.async_step_sensors()

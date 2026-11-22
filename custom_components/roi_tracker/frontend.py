@@ -132,19 +132,27 @@ async def _register_lovelace_resource(hass: HomeAssistant, url: str) -> bool:
             except Exception:  # noqa: BLE001
                 pass
 
-        existing = None
-        for item in resources.async_items():
-            item_url = item.get("url", "")
-            if item_url.split("?")[0] == CARD_PATH:
-                existing = item
-                break
+        matches = [
+            item
+            for item in resources.async_items()
+            if item.get("url", "").split("?")[0] == CARD_PATH
+        ]
 
-        if existing:
-            if existing.get("url") == url:
-                return True  # Schon aktuell
-            # URL auf neue Version aktualisieren → Browser lädt neu
-            await resources.async_update_item(existing["id"], {"url": url})
-            _LOGGER.info("ROI-Tracker-Karten-Ressource aktualisiert: %s", url)
+        if matches:
+            # Bevorzugt den Eintrag behalten, der schon aktuell ist.
+            keep = next((m for m in matches if m.get("url") == url), matches[0])
+            # Doppelte Einträge (z. B. eine alte URL ohne ?v=) entfernen: sonst
+            # lädt der Browser ggf. eine veraltete, gecachte Version der Karte.
+            for item in matches:
+                if item is not keep:
+                    await resources.async_delete_item(item["id"])
+                    _LOGGER.info(
+                        "Doppelte ROI-Tracker-Karten-Ressource entfernt: %s", item.get("url")
+                    )
+            if keep.get("url") != url:
+                # URL auf neue Version aktualisieren → Browser lädt neu
+                await resources.async_update_item(keep["id"], {"url": url})
+                _LOGGER.info("ROI-Tracker-Karten-Ressource aktualisiert: %s", url)
             return True
 
         await resources.async_create_item({"res_type": "module", "url": url})

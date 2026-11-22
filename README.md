@@ -58,8 +58,15 @@ Warum stündlich aus der Statistik?
 **Strompreis-Sensor:** Einheit €/kWh, ct/kWh oder €/MWh wird automatisch erkannt.
 Hat der Sensor eine Langzeitstatistik (`state_class: measurement`), ist auch die
 Rückrechnung stundengenau. Ohne Statistik wird der Preis aus der Zustands-Historie
-gelesen (Standard: die letzten 10 Tage); für ältere Zeiträume wird der zuletzt
-bekannte Preis bzw. der optionale Festpreis verwendet.
+gelesen (Standard: die letzten 10 Tage); für ältere Zeiträume wird der Festpreis
+verwendet. Deshalb verlangt die Einrichtung bei einem solchen Sensor (z. B.
+`sensor.tibber_current_price`) und einem Startdatum, das älter als 10 Tage ist,
+einen Festpreis als Ersatz.
+
+**Mehrere PV-Strings / Wechselrichter:** Bei „PV-Erzeugung − Einspeisung“ können
+mehrere Erzeugungs-Zähler gewählt werden, sie werden addiert. Am genauesten sind
+AC-Zähler des Wechselrichters; DC-String-Zähler enthalten noch die Wandlungsverluste
+(typisch 3–5 % zu viel Eigenverbrauch).
 
 **Hochrechnung:** Mit mindestens 12 Monaten Daten = Summe der letzten 365 Tage
 (Sommer und Winter gleichen sich aus). Vorher = Tagesdurchschnitt × 365 – in der
@@ -67,10 +74,16 @@ Karte als *vorläufig* markiert.
 
 ## 📦 Installation über HACS
 
-1. HACS → **Drei-Punkte-Menü** → **Benutzerdefinierte Repositories**
-2. URL `https://github.com/pxljake/roi-tracker`, Kategorie **Integration**
-3. **ROI Tracker** installieren und Home Assistant neu starten
-4. **Einstellungen → Geräte & Dienste → Integration hinzufügen → ROI Tracker**
+ROI Tracker ist im HACS-Standardkatalog enthalten:
+
+1. In HACS nach **ROI Tracker** suchen
+2. **ROI Tracker** herunterladen und Home Assistant neu starten
+3. **Einstellungen → Geräte & Dienste → Integration hinzufügen → ROI Tracker**
+
+[![In HACS öffnen](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=PXLJAKE&repository=ROI-Tracker&category=integration)
+
+*Falls ROI Tracker in deiner HACS-Version noch nicht auftaucht:* HACS → **Drei-Punkte-Menü** →
+**Benutzerdefinierte Repositories** → URL `https://github.com/PXLJAKE/ROI-Tracker`, Kategorie **Integration**.
 
 Voraussetzung: Home Assistant 2025.1 oder neuer, Recorder aktiv.
 
@@ -183,8 +196,15 @@ detected automatically.
 Click it to open a popup with overview, monthly/yearly/daily statistics and the
 break-even forecast.
 
-Install via HACS as a custom repository (category *Integration*), restart HA,
-then add **ROI Tracker** under *Settings → Devices & Services*. Requires HA 2025.1+.
+**Install:** search for **ROI Tracker** in HACS (it is part of the HACS default
+list), download it and restart HA, then add **ROI Tracker** under *Settings →
+Devices & Services*. Fallback for older HACS versions: add
+`https://github.com/PXLJAKE/ROI-Tracker` as a custom repository (category
+*Integration*). Requires HA 2025.1+.
+
+Several PV production meters (strings/inverters) can be selected and are added up.
+A price sensor without long-term statistics only covers the last ~10 days, so a
+fixed fallback price is required for older start dates.
 
 ## 📄 Lizenz / License
 

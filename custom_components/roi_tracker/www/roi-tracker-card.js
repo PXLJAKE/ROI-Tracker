@@ -1,5 +1,5 @@
 /**
- * ROI Tracker Card  v0.4.1
+ * ROI Tracker Card  v0.5.0
  *
  *   type: custom:roi-tracker-card
  *   device: <device_id>            # ROI-Tracker-Anlage
@@ -11,7 +11,7 @@
  * Daten kommen über die WebSocket-API `roi_tracker/data`.
  */
 
-const VERSION = "0.4.1";
+const VERSION = "0.5.0";
 const REFRESH_MS = 5 * 60 * 1000;
 const VARIANTS = ["mini", "compact", "standard", "full"];
 
@@ -36,6 +36,7 @@ const TXT = {
     years_title: "Jahre", months_of: "Monate", days_of: "Tage im", back: "← zurück zu",
     no_device: "Bitte im Karten-Editor eine Anlage auswählen.",
     loading: "Lade Daten…", error: "Daten konnten nicht geladen werden",
+    not_found: "Die gewählte Anlage gibt es nicht mehr. Bitte im Karten-Editor die Anlage neu auswählen.",
     no_data: "Noch keine Daten – die Werte erscheinen, sobald Home Assistant die erste Stunde kompiliert hat.",
     close: "Schließen", details: "Details anzeigen",
     fc_intro: (rate, date, yrs) =>
@@ -72,6 +73,7 @@ const TXT = {
     years_title: "Years", months_of: "Months", days_of: "Days in", back: "← back to",
     no_device: "Please select a system in the card editor.",
     loading: "Loading…", error: "Could not load data",
+    not_found: "The selected system no longer exists. Please select it again in the card editor.",
     no_data: "No data yet – values appear once Home Assistant has compiled the first hour.",
     close: "Close", details: "Show details",
     fc_intro: (rate, date, yrs) =>
@@ -176,6 +178,25 @@ function topRoundedBar(x, y, w, h, r = 4) {
 
 function palette(hass) {
   return hass && hass.themes && hass.themes.darkMode ? PALETTE.dark : PALETTE.light;
+}
+
+/** Alle ROI-Tracker-Anlagen (Geräte) aus hass.devices / hass.entities. */
+function roiDevices(hass) {
+  if (!hass) return [];
+  const found = new Map();
+  const devices = hass.devices || {};
+  for (const [id, dev] of Object.entries(devices)) {
+    if ((dev.identifiers || []).some((p) => Array.isArray(p) && p[0] === "roi_tracker")) {
+      found.set(id, dev.name_by_user || dev.name || id);
+    }
+  }
+  for (const ent of Object.values(hass.entities || {})) {
+    if (ent && ent.platform === "roi_tracker" && ent.device_id && !found.has(ent.device_id)) {
+      const dev = devices[ent.device_id] || {};
+      found.set(ent.device_id, dev.name_by_user || dev.name || ent.device_id);
+    }
+  }
+  return [...found.entries()].map(([id, name]) => ({ id, name }));
 }
 
 /** Teilt die Datenabfrage zwischen Karte und Popup. */
@@ -430,6 +451,7 @@ class RoiTrackerCard extends HTMLElement {
     this._error = null;
     this._loading = false;
     this._fetchedAt = 0;
+    this._device = null; // automatisch gewählte Anlage, falls config.device fehlt
     this._dialog = null;
     this._dark = null;
     this._width = 0;
@@ -442,7 +464,7 @@ class RoiTrackerCard extends HTMLElement {
     if (!config) throw new Error("Invalid configuration");
     const deviceChanged = config.device !== this._config.device;
     this._config = { variant: "standard", ...config };
-    if (deviceChanged) { this._data = null; this._fetchedAt = 0; }
+    if (deviceChanged) { this._data = null; this._fetchedAt = 0; this._device = null; }
     this._render();
     this._maybeFetch();
   }
@@ -481,16 +503,31 @@ class RoiTrackerCard extends HTMLElement {
     if (!this._hass || !this._config.device || this._loading) return;
     if (Date.now() - this._fetchedAt < REFRESH_MS) return;
     this._loading = true;
-    fetchData(this._hass, this._config.device)
+    const device = this._device || this._config.device;
+    fetchData(this._hass, device)
       .then((d) => { this._data = d; this._error = null; this._fetchedAt = Date.now(); })
       .catch((e) => {
-        this._error = (e && e.message) || String(e);
+        // Anlage gelöscht und neu angelegt → neue Geräte-ID. Gibt es genau eine
+        // ROI-Tracker-Anlage, wird sie automatisch verwendet.
+        if (e && e.code === "not_found") {
+          const others = roiDevices(this._hass).filter((d) => d.id !== device);
+          if (others.length === 1) {
+            this._device = others[0].id;
+            this._fetchedAt = 0;
+            return;
+          }
+          this._data = null;
+          this._error = this._t().not_found;
+        } else {
+          this._error = (e && e.message) || String(e);
+        }
         this._fetchedAt = Date.now() - REFRESH_MS + 30000; // in 30 s erneut versuchen
       })
       .finally(() => {
         this._loading = false;
         this._render();
         if (this._dialog) this._dialog.data = this._data;
+        if (!this._fetchedAt) this._maybeFetch();
       });
   }
 
@@ -510,7 +547,11 @@ class RoiTrackerCard extends HTMLElement {
     const header = title ? `<div class="card-header">${esc(title)}</div>` : "";
     let body;
     if (!this._config.device) body = `<div class="msg">${t.no_device}</div>`;
-    else if (!this._data && this._error) body = `<div class="msg">${t.error}: ${esc(this._error)}</div>`;
+    else if (!this._data && this._error) {
+      body = this._error === t.not_found
+        ? `<div class="msg">${esc(this._error)}</div>`
+        : `<div class="msg">${t.error}: ${esc(this._error)}</div>`;
+    }
     else if (!this._data) body = `<div class="msg">${t.loading}</div>`;
     else body = this[`_render_${this._variant()}`]();
 
@@ -815,7 +856,7 @@ class RoiTrackerDialog extends HTMLElement {
     this._month = key;
     this._monthData = null;
     this._render();
-    fetchData(this._hass, this._config.device, key)
+    fetchData(this._hass, (this._card && this._card._device) || this._config.device, key)
       .then((d) => { if (this._month === key) { this._monthData = d.days || []; this._render(); } })
       .catch(() => { if (this._month === key) { this._monthData = []; this._render(); } });
   }
@@ -962,24 +1003,7 @@ class RoiTrackerCardEditor extends HTMLElement {
   setConfig(config) { this._config = config || {}; this._render(); }
   set hass(hass) { this._hass = hass; this._render(); }
 
-  _devices() {
-    const hass = this._hass;
-    if (!hass) return [];
-    const found = new Map();
-    const devices = hass.devices || {};
-    for (const [id, dev] of Object.entries(devices)) {
-      if ((dev.identifiers || []).some((p) => Array.isArray(p) && p[0] === "roi_tracker")) {
-        found.set(id, dev.name_by_user || dev.name || id);
-      }
-    }
-    for (const ent of Object.values(hass.entities || {})) {
-      if (ent && ent.platform === "roi_tracker" && ent.device_id && !found.has(ent.device_id)) {
-        const dev = devices[ent.device_id] || {};
-        found.set(ent.device_id, dev.name_by_user || dev.name || ent.device_id);
-      }
-    }
-    return [...found.entries()].map(([id, name]) => ({ id, name }));
-  }
+  _devices() { return roiDevices(this._hass); }
 
   _render() {
     if (!this._hass) return;

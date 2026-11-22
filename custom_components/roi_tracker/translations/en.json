@@ -39,14 +39,15 @@
         "title": "Sensors: PV production & export",
         "description": "Self-consumption per hour = PV production − export + battery discharge − battery charge. All sensors must be cumulative kWh meters (as in the energy dashboard).",
         "data": {
-          "production_sensor": "PV production (kWh)",
+          "production_sensor": "PV production (kWh) – one or more meters",
           "export_sensor": "Grid export (kWh)",
           "battery_charge_sensor": "Battery charged (kWh)",
           "battery_discharge_sensor": "Battery discharged (kWh)"
         },
         "data_description": {
           "battery_charge_sensor": "Optional – only together with “battery discharged”.",
-          "battery_discharge_sensor": "Optional – only together with “battery charged”."
+          "battery_discharge_sensor": "Optional – only together with “battery charged”.",
+          "production_sensor": "Several strings or inverters are added up. Prefer the inverter's AC meter; DC string meters still include conversion losses."
         }
       },
       "sensors_direct": {
@@ -67,7 +68,9 @@
       "price_required": "Please enter a price sensor or a fixed electricity price.",
       "no_state_class": "This sensor has no long-term statistics (state_class missing) and cannot be used.",
       "duplicate_sensor": "Each sensor may only be selected once.",
-      "battery_pair": "Please provide battery charged and battery discharged together (or leave both empty)."
+      "battery_pair": "Please provide battery charged and battery discharged together (or leave both empty).",
+      "price_fallback_required": "This price sensor has no long-term statistics – hourly prices are missing for periods older than about 10 days. Please enter a fixed price as a fallback (e.g. your average energy price).",
+      "sensor_required": "Please select at least one sensor."
     }
   },
   "options": {
@@ -106,10 +109,13 @@
         "title": "Sensors: PV production & export",
         "description": "Self-consumption per hour = PV production − export + battery discharge − battery charge.",
         "data": {
-          "production_sensor": "PV production (kWh)",
+          "production_sensor": "PV production (kWh) – one or more meters",
           "export_sensor": "Grid export (kWh)",
           "battery_charge_sensor": "Battery charged (kWh)",
           "battery_discharge_sensor": "Battery discharged (kWh)"
+        },
+        "data_description": {
+          "production_sensor": "Several strings or inverters are added up. Prefer the inverter's AC meter; DC string meters still include conversion losses."
         }
       },
       "sensors_direct": {
@@ -126,7 +132,9 @@
       "price_required": "Please enter a price sensor or a fixed electricity price.",
       "no_state_class": "This sensor has no long-term statistics (state_class missing) and cannot be used.",
       "duplicate_sensor": "Each sensor may only be selected once.",
-      "battery_pair": "Please provide battery charged and battery discharged together (or leave both empty)."
+      "battery_pair": "Please provide battery charged and battery discharged together (or leave both empty).",
+      "price_fallback_required": "This price sensor has no long-term statistics – hourly prices are missing for periods older than about 10 days. Please enter a fixed price as a fallback (e.g. your average energy price).",
+      "sensor_required": "Please select at least one sensor."
     }
   },
   "selector": {

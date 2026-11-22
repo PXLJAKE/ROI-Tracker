@@ -1,6 +1,12 @@
 name: Release
 
 on:
+  # Neue Version in manifest.json auf main → Release wird automatisch erstellt
+  push:
+    branches: [main]
+    paths:
+      - custom_components/roi_tracker/manifest.json
+  # Von Hand veröffentlichtes Release → ZIP anhängen
   release:
     types: [published]
 
@@ -8,8 +14,50 @@ permissions:
   contents: write
 
 jobs:
+  auto-release:
+    name: Create release for new version
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Read version
+        id: version
+        run: |
+          version="$(jq -r .version custom_components/roi_tracker/manifest.json)"
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+          if gh release view "v${version}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create ZIP
+        if: steps.version.outputs.exists == 'false'
+        run: |
+          cd custom_components/roi_tracker
+          zip -r roi_tracker.zip ./ -x '*.pyc' -x '__pycache__/*'
+
+      - name: Create release
+        if: steps.version.outputs.exists == 'false'
+        run: |
+          tag="${{ steps.version.outputs.tag }}"
+          notes="release-notes/${tag}.md"
+          if [ -f "$notes" ]; then
+            title="$(head -n 1 "$notes" | sed 's/^# *//')"
+            tail -n +2 "$notes" > notes.tmp
+            gh release create "$tag" custom_components/roi_tracker/roi_tracker.zip \
+              --target "$GITHUB_SHA" --title "$title" --notes-file notes.tmp
+          else
+            gh release create "$tag" custom_components/roi_tracker/roi_tracker.zip \
+              --target "$GITHUB_SHA" --title "$tag" --generate-notes
+          fi
+
   release-zip:
     name: Build release ZIP
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
