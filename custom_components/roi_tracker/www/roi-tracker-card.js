@@ -1,5 +1,5 @@
 /**
- * ROI Tracker Card  v0.5.0
+ * ROI Tracker Card  v0.5.1
  *
  *   type: custom:roi-tracker-card
  *   device: <device_id>            # ROI-Tracker-Anlage
@@ -11,7 +11,7 @@
  * Daten kommen über die WebSocket-API `roi_tracker/data`.
  */
 
-const VERSION = "0.5.0";
+const VERSION = "0.5.1";
 const REFRESH_MS = 5 * 60 * 1000;
 const VARIANTS = ["mini", "compact", "standard", "full"];
 

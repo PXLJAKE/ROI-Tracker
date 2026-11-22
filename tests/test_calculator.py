@@ -88,6 +88,19 @@ def test_fill_prices_forward_backward_and_fallback() -> None:
     assert calculator.fill_prices(hours, {})[hours[2]] is None
 
 
+def test_fill_prices_prefers_fixed_price_over_far_backfill() -> None:
+    """Preis-Historie beginnt erst Tage später → Festpreis statt Rückwärtsfüllen."""
+    hours = [H0 + timedelta(hours=i) for i in range(48)]
+    known = {hours[40]: 0.47}
+    filled = calculator.fill_prices(hours, known, fallback=0.30)
+    assert filled[hours[0]] == 0.30          # 40 h vorher → Festpreis
+    assert filled[hours[33]] == 0.30         # 7 h vorher → Festpreis
+    assert filled[hours[34]] == 0.47         # 6 h vorher → nächster Preis
+    assert filled[hours[45]] == 0.47         # danach → letzter Preis
+    # Ohne Festpreis wird weiterhin rückwärts gefüllt
+    assert calculator.fill_prices(hours, known)[hours[0]] == 0.47
+
+
 def test_time_weighted_hourly_price() -> None:
     points = [
         (H0 - timedelta(minutes=30), 0.20),  # gilt ab Stundenbeginn

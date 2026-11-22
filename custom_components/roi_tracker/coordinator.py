@@ -63,6 +63,8 @@ CHUNK = timedelta(days=31)
 # Zustands-Historie (für Preis-Sensoren ohne Statistik) reicht so weit zurück.
 HISTORY_WINDOW = timedelta(days=14)
 LIVE_MAX = timedelta(hours=4)
+# Erhöhen, wenn sich die Rechenlogik ändert → gespeicherte Tage werden neu berechnet.
+CALC_VERSION = 2
 
 
 def _num(value) -> float | None:
@@ -151,13 +153,33 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[dict]):
             g(CONF_EXPORT_SENSOR),
         )
 
+    def _base_ids(self) -> list[str]:
+        """Sensoren, ohne deren Stundenwert der Eigenverbrauch unbekannt ist.
+
+        Wurde z. B. der PV-Zähler erst nach dem Startdatum angelegt, gibt es
+        für die Stunden davor keine Statistik-Zeile. Würde man dort trotzdem
+        Einspeisung/Batterie abziehen, entstünde negativer Eigenverbrauch.
+        """
+        mode = self.config.get(CONF_MODE, MODE_HOUSE)
+        if mode == MODE_PV:
+            ids = self._get_all(CONF_PRODUCTION_SENSOR)
+        elif mode == MODE_DIRECT:
+            ids = [self._get(CONF_CONSUMPTION_SENSOR)]
+        else:
+            ids = [self._get(CONF_CONSUMPTION_SENSOR), self._get(CONF_GRID_IMPORT_SENSOR)]
+        return [i for i in ids if i]
+
     def _energy_ids(self) -> set[str]:
         plus, minus, export = self._roles()
         return {*plus, *minus, *([export] if export else [])}
 
     def _config_hash(self) -> str:
         cfg = self.config
-        payload = json.dumps({k: cfg.get(k) for k in CALC_KEYS}, sort_keys=True, default=str)
+        payload = json.dumps(
+            {"calc": CALC_VERSION, **{k: cfg.get(k) for k in CALC_KEYS}},
+            sort_keys=True,
+            default=str,
+        )
         return hashlib.sha1(payload.encode()).hexdigest()
 
     # ── Persistenz ────────────────────────────────────────────────────────────
@@ -292,14 +314,18 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[dict]):
         active = [
             h for h in hours if any(stats.get(s, {}).get(h, 0.0) for s in ids)
         ]
+        base = self._base_ids()
         prices = await self._async_hour_prices(active, start, done_until) if active else {}
 
         for hour in active:
             changes = {s: stats.get(s, {}).get(hour, 0.0) for s in ids}
+            # Fehlt eine Basis-Zeile, ist der Eigenverbrauch dieser Stunde
+            # unbekannt → nur die Einspeisung werten.
+            self_known = all(hour in stats.get(s, {}) for s in base)
             amounts = calculator.hour_amounts(
                 changes,
-                plus=plus,
-                minus=minus,
+                plus=plus if self_known else [],
+                minus=minus if self_known else [],
                 export_id=export,
                 price=prices.get(hour),
                 feed_in=self.feed_in,

@@ -258,3 +258,27 @@ def test_pv_mode_adds_several_production_sensors() -> None:
     assert c.data["self_kwh"] == 90.0
     assert c.data["savings"] == 27.0
     assert c.data["revenue"] == 4.8
+
+
+def test_hours_before_production_meter_existed_do_not_go_negative() -> None:
+    """PV-Zähler erst später angelegt: Einspeisung davor zählt nur als Vergütung."""
+    rec = FakeRecorder()
+    end = datetime(2026, 5, 3, 10, 0, tzinfo=UTC)
+    pv_start = START_UTC + 24 * H
+    rec.fill_hours("sensor.pv", 3.0, pv_start, end)
+    rec.fill_hours("sensor.export", 1.0, START_UTC, end)
+    cfg = {
+        **BASE_CFG,
+        "calc_mode": "pv",
+        "production_sensor": "sensor.pv",
+        "price_sensor": None,
+        "price_fixed": 0.30,
+    }
+    hass, entry, _ = _setup(cfg=cfg, recorder=rec)
+    c = asyncio.run(_run(hass, entry))
+    # Nur 36 Stunden mit PV-Zeile: (3 − 1) kWh × 36 h
+    assert c.data["self_kwh"] == 72.0
+    assert c.data["savings"] == round(72 * 0.30, 2)
+    # Einspeisung aller 60 Stunden wird vergütet
+    assert c.data["export_kwh"] == 60.0
+    assert c.days["2026-05-01"]["self_kwh"] == 0.0

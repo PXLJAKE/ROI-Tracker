@@ -21,6 +21,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 HOUR = timedelta(hours=1)
+# So weit wird ein später bekannter Preis höchstens rückwärts übernommen.
+BACKFILL_MAX = timedelta(hours=6)
 DAY_FIELDS = ("self_kwh", "export_kwh", "savings", "revenue")
 
 
@@ -117,27 +119,40 @@ def fill_prices(
     known: dict[datetime, float],
     previous: float | None = None,
     fallback: float | None = None,
+    max_backfill: timedelta = BACKFILL_MAX,
 ) -> dict[datetime, float | None]:
     """Ordnet jeder Stunde einen Preis zu.
 
     Reihenfolge: bekannter Stundenpreis → zuletzt bekannter Preis (auch aus
-    einem früheren Abschnitt, ``previous``) → erster bekannter Preis danach →
-    ``fallback`` (Festpreis) → None.
+    einem früheren Abschnitt, ``previous``) → erster bekannter Preis danach,
+    aber nur bis ``max_backfill`` davor → ``fallback`` (Festpreis) → erster
+    bekannter Preis (nur ohne Festpreis) → None.
+
+    Die Begrenzung verhindert, dass bei einem Preis-Sensor ohne Statistik der
+    erste Preis aus der Zustands-Historie wochenweit rückwärts verteilt wird,
+    obwohl ein Festpreis als Ersatz eingetragen ist.
     """
     ordered = sorted(hours)
-    first_known = next((known[h] for h in ordered if h in known), None)
+    known_hours = sorted(known)
     last = previous
     out: dict[datetime, float | None] = {}
+    nxt = 0
     for hour in ordered:
+        while nxt < len(known_hours) and known_hours[nxt] < hour:
+            nxt += 1
         if hour in known:
             last = known[hour]
             out[hour] = last
         elif last is not None:
             out[hour] = last
-        elif first_known is not None:
-            out[hour] = first_known
-        else:
+        elif nxt < len(known_hours) and known_hours[nxt] - hour <= max_backfill:
+            out[hour] = known[known_hours[nxt]]
+        elif fallback is not None:
             out[hour] = fallback
+        elif nxt < len(known_hours):
+            out[hour] = known[known_hours[nxt]]
+        else:
+            out[hour] = None
     return out
 
 
