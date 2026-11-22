@@ -102,7 +102,17 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[dict]):
         return {**self.entry.data, **self.entry.options}
 
     def _get(self, key: str) -> str | None:
-        return self.config.get(key) or None
+        value = self.config.get(key)
+        if isinstance(value, (list, tuple)):
+            value = value[0] if value else None
+        return value or None
+
+    def _get_all(self, key: str) -> list[str]:
+        """Alle Sensoren eines Feldes (Erzeugung darf mehrere haben, z. B. zwei Strings)."""
+        value = self.config.get(key)
+        if isinstance(value, (list, tuple)):
+            return [v for v in value if v]
+        return [value] if value else []
 
     @property
     def investment(self) -> float:
@@ -127,7 +137,7 @@ class RoiTrackerCoordinator(DataUpdateCoordinator[dict]):
         mode = self.config.get(CONF_MODE, MODE_HOUSE)
         g = self._get
         if mode == MODE_PV:
-            plus = [g(CONF_PRODUCTION_SENSOR), g(CONF_BATTERY_DISCHARGE_SENSOR)]
+            plus = [*self._get_all(CONF_PRODUCTION_SENSOR), g(CONF_BATTERY_DISCHARGE_SENSOR)]
             minus = [g(CONF_EXPORT_SENSOR), g(CONF_BATTERY_CHARGE_SENSOR)]
         elif mode == MODE_DIRECT:
             plus = [g(CONF_CONSUMPTION_SENSOR), g(CONF_BATTERY_DISCHARGE_SENSOR)]

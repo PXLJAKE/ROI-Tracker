@@ -232,3 +232,29 @@ def test_export_for_card() -> None:
     assert [d["period"] for d in out["days"]] == ["2026-05-01", "2026-05-02", "2026-05-03"]
     assert out["days"][0]["avg_price"] == 0.3
     assert c.export("2026-04")["days"] == []
+
+
+def test_pv_mode_adds_several_production_sensors() -> None:
+    """Zwei PV-Strings (z. B. Ost/West) werden addiert."""
+    rec = FakeRecorder()
+    end = datetime(2026, 5, 3, 10, 0, tzinfo=UTC)
+    rec.fill_hours("sensor.pv1", 2.0, START_UTC, end)
+    rec.fill_hours("sensor.pv2", 1.0, START_UTC, end)
+    rec.fill_hours("sensor.export", 1.0, START_UTC, end)
+    rec.fill_hours("sensor.chg", 1.0, START_UTC, end)
+    rec.fill_hours("sensor.dis", 0.5, START_UTC, end)
+    cfg = {
+        **BASE_CFG,
+        "calc_mode": "pv",
+        "production_sensor": ["sensor.pv1", "sensor.pv2"],
+        "battery_charge_sensor": "sensor.chg",
+        "battery_discharge_sensor": "sensor.dis",
+        "price_sensor": None,
+        "price_fixed": 0.30,
+    }
+    hass, entry, _ = _setup(cfg=cfg, recorder=rec)
+    c = asyncio.run(_run(hass, entry))
+    # (2 + 1 − 1 + 0,5 − 1) = 1,5 kWh/h × 60 h × 0,30 €
+    assert c.data["self_kwh"] == 90.0
+    assert c.data["savings"] == 27.0
+    assert c.data["revenue"] == 4.8

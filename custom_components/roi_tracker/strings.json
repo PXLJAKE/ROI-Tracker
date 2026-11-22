@@ -39,14 +39,15 @@
         "title": "Sensoren: PV-Erzeugung & Einspeisung",
         "description": "Eigenverbrauch pro Stunde = PV-Erzeugung − Einspeisung + Batterie-Entladung − Batterie-Ladung. Alle Sensoren müssen kumulierte kWh-Zähler sein (wie im Energie-Dashboard).",
         "data": {
-          "production_sensor": "PV-Erzeugung (kWh)",
+          "production_sensor": "PV-Erzeugung (kWh) – ein oder mehrere Zähler",
           "export_sensor": "Einspeisung (kWh)",
           "battery_charge_sensor": "Batterie geladen (kWh)",
           "battery_discharge_sensor": "Batterie entladen (kWh)"
         },
         "data_description": {
           "battery_charge_sensor": "Optional – nur zusammen mit „Batterie entladen“.",
-          "battery_discharge_sensor": "Optional – nur zusammen mit „Batterie geladen“."
+          "battery_discharge_sensor": "Optional – nur zusammen mit „Batterie geladen“.",
+          "production_sensor": "Mehrere Strings oder Wechselrichter werden addiert. Am besten AC-Zähler des Wechselrichters; DC-String-Zähler enthalten noch die Wandlungsverluste."
         }
       },
       "sensors_direct": {
@@ -67,7 +68,9 @@
       "price_required": "Bitte einen Strompreis-Sensor oder einen festen Strompreis angeben.",
       "no_state_class": "Dieser Sensor hat keine Langzeitstatistik (state_class fehlt) und kann nicht verwendet werden.",
       "duplicate_sensor": "Jeder Sensor darf nur einmal ausgewählt werden.",
-      "battery_pair": "Batterie geladen und Batterie entladen bitte gemeinsam angeben (oder beide leer lassen)."
+      "battery_pair": "Batterie geladen und Batterie entladen bitte gemeinsam angeben (oder beide leer lassen).",
+      "price_fallback_required": "Dieser Preis-Sensor hat keine Langzeitstatistik – für Zeiträume, die älter als ca. 10 Tage sind, fehlen Stundenpreise. Bitte einen festen Strompreis als Ersatz eintragen (z. B. deinen Ø-Arbeitspreis).",
+      "sensor_required": "Bitte mindestens einen Sensor auswählen."
     }
   },
   "options": {
@@ -106,10 +109,13 @@
         "title": "Sensoren: PV-Erzeugung & Einspeisung",
         "description": "Eigenverbrauch pro Stunde = PV-Erzeugung − Einspeisung + Batterie-Entladung − Batterie-Ladung.",
         "data": {
-          "production_sensor": "PV-Erzeugung (kWh)",
+          "production_sensor": "PV-Erzeugung (kWh) – ein oder mehrere Zähler",
           "export_sensor": "Einspeisung (kWh)",
           "battery_charge_sensor": "Batterie geladen (kWh)",
           "battery_discharge_sensor": "Batterie entladen (kWh)"
+        },
+        "data_description": {
+          "production_sensor": "Mehrere Strings oder Wechselrichter werden addiert. Am besten AC-Zähler des Wechselrichters; DC-String-Zähler enthalten noch die Wandlungsverluste."
         }
       },
       "sensors_direct": {
@@ -126,7 +132,9 @@
       "price_required": "Bitte einen Strompreis-Sensor oder einen festen Strompreis angeben.",
       "no_state_class": "Dieser Sensor hat keine Langzeitstatistik (state_class fehlt) und kann nicht verwendet werden.",
       "duplicate_sensor": "Jeder Sensor darf nur einmal ausgewählt werden.",
-      "battery_pair": "Batterie geladen und Batterie entladen bitte gemeinsam angeben (oder beide leer lassen)."
+      "battery_pair": "Batterie geladen und Batterie entladen bitte gemeinsam angeben (oder beide leer lassen).",
+      "price_fallback_required": "Dieser Preis-Sensor hat keine Langzeitstatistik – für Zeiträume, die älter als ca. 10 Tage sind, fehlen Stundenpreise. Bitte einen festen Strompreis als Ersatz eintragen (z. B. deinen Ø-Arbeitspreis).",
+      "sensor_required": "Bitte mindestens einen Sensor auswählen."
     }
   },
   "selector": {
