@@ -1,0 +1,142 @@
+# Doku-Website für ROI Tracker
+#
+# Lokal:  pip install --require-hashes -r requirements-docs.txt
+#         DOCS_URL=https://example.org/docs/roi-tracker/ mkdocs serve
+# Bauen:  mkdocs build --strict   (Ergebnis in ./site)
+#
+# site_url kommt aus der Umgebungsvariable DOCS_URL, z. B.
+# https://<meine-domain>/docs/roi-tracker/ – ohne DOCS_URL wird ohne
+# site_url gebaut (Links bleiben relativ und funktionieren trotzdem).
+
+site_name: ROI Tracker
+site_description: Home-Assistant-Integration – wann hat sich deine PV-Anlage bezahlt gemacht?
+site_url: !ENV [DOCS_URL, ""]
+repo_url: https://github.com/PXLJAKE/ROI-Tracker
+repo_name: PXLJAKE/ROI-Tracker
+edit_uri: edit/main/docs/
+copyright: ROI Tracker – MIT-Lizenz
+
+docs_dir: docs
+strict: true
+use_directory_urls: true
+
+theme:
+  name: material
+  language: de
+  logo: assets/icon.png
+  favicon: assets/icon.png
+  icon:
+    repo: fontawesome/brands/github
+  font: false # keine Google-Fonts laden (Datenschutz, Selbsthosting)
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Zu hellem Design wechseln
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: amber
+      accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: Zu dunklem Design wechseln
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: amber
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: Systemeinstellung verwenden
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - search.highlight
+    - search.suggest
+
+plugins:
+  - search
+  - i18n:
+      docs_structure: folder
+      fallback_to_default: false
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: de
+          name: Deutsch
+          default: true
+          build: true
+        - locale: en
+          name: English
+          build: true
+          site_description: Home Assistant integration – when has your PV system paid for itself?
+          copyright: ROI Tracker – MIT License
+          nav_translations:
+            Start: Home
+            Installation: Installation
+            Konfiguration: Configuration
+            Nutzung: Usage
+            FAQ: FAQ
+            Fehlersuche: Troubleshooting
+            Changelog: Changelog
+            Mitmachen: Contributing
+          theme:
+            palette:
+              - media: "(prefers-color-scheme)"
+                toggle:
+                  icon: material/brightness-auto
+                  name: Switch to light mode
+              - media: "(prefers-color-scheme: light)"
+                scheme: default
+                primary: amber
+                accent: blue
+                toggle:
+                  icon: material/brightness-7
+                  name: Switch to dark mode
+              - media: "(prefers-color-scheme: dark)"
+                scheme: slate
+                primary: amber
+                accent: blue
+                toggle:
+                  icon: material/brightness-4
+                  name: Use system setting
+
+nav:
+  - Start: index.md
+  - Installation: installation.md
+  - Konfiguration: configuration.md
+  - Nutzung: usage.md
+  - FAQ: faq.md
+  - Fehlersuche: troubleshooting.md
+  - Changelog: changelog.md
+  - Mitmachen: contributing.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+  links:
+    not_found: warn
+    absolute_links: warn
+    unrecognized_links: warn
+    anchors: warn

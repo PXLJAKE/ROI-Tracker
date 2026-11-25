@@ -1,0 +1,12 @@
+# Markdown-Lint für die Doku (docs/**/*.md)
+config:
+  default: true
+  MD013: false        # Zeilenlänge: Tabellen und Links sind länger
+  MD033: false        # Inline-HTML erlaubt
+  MD046: false        # Material-Admonitions/Tabs nutzen eingerückte Blöcke
+  MD060: false        # Tabellen-Spaltenausrichtung nicht erzwingen
+  MD024:
+    siblings_only: true
+
+globs:
+  - "docs/**/*.md"

@@ -1,0 +1,7 @@
+# Direkte Abhängigkeiten der Doku-Website.
+# Lockfile neu erzeugen:
+#   pip install pip-tools
+#   pip-compile --generate-hashes --allow-unsafe -o requirements-docs.txt requirements-docs.in
+mkdocs==1.6.1
+mkdocs-material==9.8.2
+mkdocs-static-i18n==1.3.1

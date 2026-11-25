@@ -1,0 +1,188 @@
+name: Docs release
+
+# Baut die Doku-Website für ein veröffentlichtes Release (keine Vorabversion),
+# hängt sie als roi-tracker-docs-<version>.zip an das Release und lädt sie
+# optional per rsync über SSH auf den Plesk-Server.
+#
+# Aufgerufen aus release.yml (automatisches und von Hand veröffentlichtes
+# Release) oder von Hand über "Run workflow" mit einem Release-Tag.
+#
+# Deploy läuft nur, wenn alle fünf Repo-Secrets gesetzt sind:
+#   DOCS_DEPLOY_HOST, DOCS_DEPLOY_USER, DOCS_DEPLOY_KEY,
+#   DOCS_DEPLOY_PATH, DOCS_DEPLOY_KNOWN_HOSTS
+# DOCS_DEPLOY_PATH ist der volle Zielordner und muss auf /docs/roi-tracker/ enden.
+# Optional: DOCS_DEPLOY_PORT, falls SSH nicht auf Port 22 läuft.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release-Tag, z. B. v0.5.1
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release-Tag, z. B. v0.5.1
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: docs-release
+  cancel-in-progress: false
+
+env:
+  PROJECT: roi-tracker
+  TAG: ${{ inputs.tag }}
+
+jobs:
+  build:
+    name: Build docs ZIP
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # ZIP an das Release hängen
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    outputs:
+      zip: ${{ steps.zip.outputs.name }}
+    steps:
+      - name: Release prüfen
+        run: |
+          if ! [[ "$TAG" =~ ^v?[0-9]+(\.[0-9]+)*([.-][0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::Ungültiger Tag: $TAG"; exit 1
+          fi
+          info="$(gh release view "$TAG" --json isDraft,isPrerelease)"
+          if [ "$(jq -r .isDraft <<<"$info")" = "true" ] || [ "$(jq -r .isPrerelease <<<"$info")" = "true" ]; then
+            echo "::error::$TAG ist ein Entwurf oder eine Vorabversion – Doku wird nur für veröffentlichte Releases gebaut."
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-docs.txt
+
+      - name: Install MkDocs (gepinnt, mit Hashes)
+        run: pip install --require-hashes -r requirements-docs.txt
+
+      - name: Build
+        env:
+          DOCS_URL: ${{ vars.DOCS_URL }}
+          NO_MKDOCS_2_WARNING: "1"
+        run: |
+          if [ -z "$DOCS_URL" ]; then
+            echo "::warning::Repo-Variable DOCS_URL ist nicht gesetzt – gebaut wird ohne site_url (keine Sitemap-/Canonical-URLs)."
+          fi
+          mkdocs build --strict
+
+      - name: ZIP erstellen
+        id: zip
+        run: |
+          name="${PROJECT}-docs-${TAG#v}.zip"
+          (cd site && zip -qr "../$name" .)
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: An das Release hängen
+        run: gh release upload "$TAG" "${{ steps.zip.outputs.name }}" --clobber
+
+  deploy:
+    name: Deploy auf Plesk (optional)
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Release-ZIP herunterladen
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      ZIP: ${{ needs.build.outputs.zip }}
+      DEPLOY_HOST: ${{ secrets.DOCS_DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DOCS_DEPLOY_USER }}
+      DEPLOY_KEY: ${{ secrets.DOCS_DEPLOY_KEY }}
+      DEPLOY_PATH: ${{ secrets.DOCS_DEPLOY_PATH }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DOCS_DEPLOY_KNOWN_HOSTS }}
+      DEPLOY_PORT: ${{ secrets.DOCS_DEPLOY_PORT }}
+    steps:
+      - name: Secrets prüfen
+        id: check
+        run: |
+          missing=()
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_KEY DEPLOY_PATH DEPLOY_KNOWN_HOSTS; do
+            [ -n "${!name}" ] || missing+=("DOCS_$name")
+          done
+          if [ ${#missing[@]} -eq 5 ]; then
+            echo "Keine Deploy-Secrets gesetzt – Deploy wird übersprungen."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          elif [ ${#missing[@]} -gt 0 ]; then
+            echo "::warning::Deploy übersprungen, es fehlen: ${missing[*]}"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Zielpfad prüfen
+        if: steps.check.outputs.enabled == 'true'
+        id: target
+        run: |
+          path="$DEPLOY_PATH"
+          # Leer, "/" oder nur Schrägstriche ablehnen
+          if [ -z "${path//\//}" ]; then
+            echo "::error::DOCS_DEPLOY_PATH ist leer oder \"/\"."; exit 1
+          fi
+          case "$path" in
+            /*) ;;
+            *) echo "::error::DOCS_DEPLOY_PATH muss absolut sein."; exit 1 ;;
+          esac
+          if [[ "$path" =~ [[:space:]] ]] || [[ "/$path/" == *"/../"* ]] || [[ "/$path/" == *"/./"* ]]; then
+            echo "::error::DOCS_DEPLOY_PATH darf keine Leerzeichen, \"..\" oder \".\" enthalten."; exit 1
+          fi
+          path="${path%/}/"
+          path="$(sed -E 's#/+#/#g' <<<"$path")"
+          if [[ "$path" != */docs/${PROJECT}/ ]]; then
+            echo "::error::DOCS_DEPLOY_PATH muss auf /docs/${PROJECT}/ enden (ist: $path)."; exit 1
+          fi
+          echo "path=$path" >> "$GITHUB_OUTPUT"
+
+      - name: Doku-ZIP holen
+        if: steps.check.outputs.enabled == 'true'
+        run: |
+          gh release download "$TAG" --pattern "$ZIP" --dir .
+          mkdir site
+          unzip -q "$ZIP" -d site
+          test -f site/index.html
+
+      - name: SSH einrichten
+        if: steps.check.outputs.enabled == 'true'
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/deploy_known_hosts
+          chmod 600 ~/.ssh/deploy_known_hosts
+
+      - name: rsync
+        if: steps.check.outputs.enabled == 'true'
+        env:
+          TARGET: ${{ steps.target.outputs.path }}
+        run: |
+          # Host-Key-Prüfung bleibt an: nur Schlüssel aus DOCS_DEPLOY_KNOWN_HOSTS werden akzeptiert.
+          port="${DEPLOY_PORT:-22}"
+          if ! [[ "$port" =~ ^[0-9]+$ ]]; then echo "::error::DOCS_DEPLOY_PORT ist keine Zahl."; exit 1; fi
+          ssh_cmd="ssh -p $port -i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes"
+          ssh_cmd+=" -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/deploy_known_hosts"
+          # --delete wirkt nur innerhalb von $TARGET (Quelle "site/" → Inhalt des Zielordners).
+          rsync -rlz --delete --chmod=D755,F644 --protect-args \
+            -e "$ssh_cmd" \
+            site/ "${DEPLOY_USER}@${DEPLOY_HOST}:${TARGET}"
+
+      - name: Schlüssel entfernen
+        if: always()
+        run: rm -f ~/.ssh/deploy_key ~/.ssh/deploy_known_hosts
