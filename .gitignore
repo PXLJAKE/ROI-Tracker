@@ -19,3 +19,7 @@ config/
 # Node (falls die Karte später mit Build-Tooling erweitert wird)
 node_modules/
 dist-build/
+
+# MkDocs
+site/
+dist-docs/

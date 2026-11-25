@@ -1,0 +1,54 @@
+name: Docs
+
+# Prüft die Doku-Website bei jedem Pull Request:
+#   - mkdocs build --strict (kaputte Links/Anker brechen den Build), danach
+#     Prüfung, dass alle Links unter /docs/roi-tracker/ mit 200 erreichbar sind
+#   - Markdown-Lint für docs/**/*.md
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: mkdocs build --strict
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-docs.txt
+
+      - name: Install MkDocs (gepinnt, mit Hashes)
+        run: pip install --require-hashes -r requirements-docs.txt
+
+      - name: Build (mkdocs build --strict + Pfade auf /docs/roi-tracker/)
+        run: python scripts/build_docs.py
+
+      - name: Links unter /docs/roi-tracker/ prüfen
+        run: python scripts/check_docs_links.py
+
+  lint:
+    name: Markdown-Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: DavidAnson/markdownlint-cli2-action@3ce8f712b5d8f31acd8e201be6d97e3d2bb23eb7 # v25.1.0
+        with:
+          config: .markdownlint-cli2.yaml
+          globs: docs/**/*.md   # nur die Doku; ohne Angabe würde die Action auch README.md prüfen

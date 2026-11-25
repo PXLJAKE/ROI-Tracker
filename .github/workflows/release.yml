@@ -10,18 +10,22 @@ on:
   release:
     types: [published]
 
-permissions:
-  contents: write
+permissions: {}
 
 jobs:
   auto-release:
     name: Create release for new version
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       GH_TOKEN: ${{ github.token }}
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      created: ${{ steps.version.outputs.exists == 'false' }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Read version
         id: version
@@ -59,8 +63,10 @@ jobs:
     name: Build release ZIP
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set version in manifest.json
         run: |
@@ -76,6 +82,28 @@ jobs:
           zip -r roi_tracker.zip ./ -x '*.pyc' -x '__pycache__/*'
 
       - name: Upload ZIP to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           files: custom_components/roi_tracker/roi_tracker.zip
+
+  # Doku-Website als roi-tracker-docs-<version>.zip an das Release hängen.
+  # Zwei Aufrufer, weil ein mit dem GITHUB_TOKEN erstelltes Release kein
+  # "release: published" auslöst.
+  docs-auto:
+    name: Docs (automatisches Release)
+    needs: auto-release
+    if: needs.auto-release.outputs.created == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/docs-release.yml
+    with:
+      tag: ${{ needs.auto-release.outputs.tag }}
+
+  docs-published:
+    name: Docs (veröffentlichtes Release)
+    if: github.event_name == 'release' && !github.event.release.prerelease
+    permissions:
+      contents: write
+    uses: ./.github/workflows/docs-release.yml
+    with:
+      tag: ${{ github.event.release.tag_name }}
