@@ -50,3 +50,4 @@ jobs:
       - uses: DavidAnson/markdownlint-cli2-action@3ce8f712b5d8f31acd8e201be6d97e3d2bb23eb7 # v25.1.0
         with:
           config: .markdownlint-cli2.yaml
+          globs: docs/**/*.md   # nur die Doku; ohne Angabe würde die Action auch README.md prüfen
