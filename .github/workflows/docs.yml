@@ -1,7 +1,8 @@
 name: Docs
 
 # Prüft die Doku-Website bei jedem Pull Request:
-#   - mkdocs build --strict (kaputte Links/Anker brechen den Build)
+#   - mkdocs build --strict (kaputte Links/Anker brechen den Build), danach
+#     Prüfung, dass alle Links unter /docs/roi-tracker/ mit 200 erreichbar sind
 #   - Markdown-Lint für docs/**/*.md
 
 on:
@@ -33,11 +34,11 @@ jobs:
       - name: Install MkDocs (gepinnt, mit Hashes)
         run: pip install --require-hashes -r requirements-docs.txt
 
-      - name: Build
-        env:
-          DOCS_URL: ${{ vars.DOCS_URL }}
-          NO_MKDOCS_2_WARNING: "1"
-        run: mkdocs build --strict
+      - name: Build (mkdocs build --strict + Pfade auf /docs/roi-tracker/)
+        run: python scripts/build_docs.py
+
+      - name: Links unter /docs/roi-tracker/ prüfen
+        run: python scripts/check_docs_links.py
 
   lint:
     name: Markdown-Lint

@@ -44,9 +44,15 @@ Die Doku liegt in `docs/de/` und `docs/en/` (gleiche Dateinamen in beiden Sprach
 
 ```bash
 pip install --require-hashes -r requirements-docs.txt
-mkdocs serve                 # Vorschau auf http://127.0.0.1:8000/
-mkdocs build --strict        # wie in der CI
+mkdocs serve                          # Vorschau auf http://127.0.0.1:8000/docs/roi-tracker/
+python scripts/build_docs.py          # wie in der CI: build --strict, Pfade auf /docs/roi-tracker/
+python scripts/check_docs_links.py    # alle Links unter /docs/roi-tracker/ abrufen (müssen 200 liefern)
+python scripts/build_docs.py --zip 0.5.1   # zusätzlich dist-docs/roi-tracker-docs-0.5.1.zip
 ```
+
+`site_url` in `mkdocs.yml` ist eine Platzhalter-Domain; `build_docs.py` entfernt sie nach dem Build,
+sodass alle Links und Assets mit `/docs/roi-tracker/` beginnen. Das ZIP enthält genau einen Ordner
+`roi-tracker/`, der in den `docs`-Ordner der Website kopiert wird.
 
 Links auf Dateien außerhalb von `docs/` bitte als absolute GitHub-Links schreiben, sonst schlägt
 `mkdocs build --strict` fehl. Abhängigkeiten aktualisieren:

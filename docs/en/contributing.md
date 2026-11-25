@@ -44,9 +44,15 @@ The docs live in `docs/de/` and `docs/en/` (same file names in both languages).
 
 ```bash
 pip install --require-hashes -r requirements-docs.txt
-mkdocs serve                 # preview at http://127.0.0.1:8000/
-mkdocs build --strict        # as in CI
+mkdocs serve                          # preview at http://127.0.0.1:8000/docs/roi-tracker/
+python scripts/build_docs.py          # as in CI: build --strict, paths under /docs/roi-tracker/
+python scripts/check_docs_links.py    # fetch every link under /docs/roi-tracker/ (must return 200)
+python scripts/build_docs.py --zip 0.5.1   # additionally dist-docs/roi-tracker-docs-0.5.1.zip
 ```
+
+`site_url` in `mkdocs.yml` is a placeholder domain; `build_docs.py` removes it after the build so that
+all links and assets start with `/docs/roi-tracker/`. The ZIP contains exactly one folder
+`roi-tracker/`, which is copied into the website's `docs` folder.
 
 Links to files outside `docs/` must be absolute GitHub links, otherwise `mkdocs build --strict`
 fails. Updating dependencies:

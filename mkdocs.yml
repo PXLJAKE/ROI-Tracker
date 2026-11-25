@@ -1,16 +1,16 @@
-# Doku-Website für ROI Tracker
+# Doku-Website für ROI Tracker, gehostet unter /docs/roi-tracker/
 #
 # Lokal:  pip install --require-hashes -r requirements-docs.txt
-#         DOCS_URL=https://example.org/docs/roi-tracker/ mkdocs serve
-# Bauen:  mkdocs build --strict   (Ergebnis in ./site)
+#         mkdocs serve                                # Vorschau
+#         python scripts/build_docs.py --zip 0.5.1    # fertiger Ordner + ZIP
 #
-# site_url kommt aus der Umgebungsvariable DOCS_URL, z. B.
-# https://<meine-domain>/docs/roi-tracker/ – ohne DOCS_URL wird ohne
-# site_url gebaut (Links bleiben relativ und funktionieren trotzdem).
+# site_url ist eine Platzhalter-Domain. scripts/build_docs.py entfernt sie nach
+# dem Build aus HTML und Sitemap, sodass alle Links mit /docs/roi-tracker/
+# beginnen und die Seite auf jeder Domain funktioniert.
 
 site_name: ROI Tracker
 site_description: Home-Assistant-Integration – wann hat sich deine PV-Anlage bezahlt gemacht?
-site_url: !ENV [DOCS_URL, ""]
+site_url: https://docs.invalid/docs/roi-tracker/
 repo_url: https://github.com/PXLJAKE/ROI-Tracker
 repo_name: PXLJAKE/ROI-Tracker
 edit_uri: edit/main/docs/

@@ -86,9 +86,9 @@ jobs:
         with:
           files: custom_components/roi_tracker/roi_tracker.zip
 
-  # Doku-Website als roi-tracker-docs-<version>.zip an das Release hängen
-  # (+ optionaler Deploy auf Plesk). Zwei Aufrufer, weil ein mit dem
-  # GITHUB_TOKEN erstelltes Release kein "release: published" auslöst.
+  # Doku-Website als roi-tracker-docs-<version>.zip an das Release hängen.
+  # Zwei Aufrufer, weil ein mit dem GITHUB_TOKEN erstelltes Release kein
+  # "release: published" auslöst.
   docs-auto:
     name: Docs (automatisches Release)
     needs: auto-release
@@ -98,7 +98,6 @@ jobs:
     uses: ./.github/workflows/docs-release.yml
     with:
       tag: ${{ needs.auto-release.outputs.tag }}
-    secrets: inherit
 
   docs-published:
     name: Docs (veröffentlichtes Release)
@@ -108,4 +107,3 @@ jobs:
     uses: ./.github/workflows/docs-release.yml
     with:
       tag: ${{ github.event.release.tag_name }}
-    secrets: inherit
