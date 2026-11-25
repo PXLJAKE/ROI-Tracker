@@ -5,6 +5,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/pxljake/roi-tracker)](https://github.com/pxljake/roi-tracker/releases)
 
+[![Projektseite](https://img.shields.io/badge/Projektseite-pxljake.com-F5A623?style=for-the-badge)](https://pxljake.com/projects/roi-tracker/)
+[![Dokumentation](https://img.shields.io/badge/Dokumentation-lesen-2A78D6?style=for-the-badge)](https://pxljake.com/docs/roi-tracker/)
+
 **Wann hat sich deine PV-Anlage bezahlt gemacht?** ROI Tracker rechnet aus,
 wie viel du durch selbst genutzten Solarstrom **gespart** und durch Einspeisung
 **verdient** hast – mit festem oder dynamischem Strompreis (Tibber, aWATTar, EPEX …) –
@@ -178,6 +181,9 @@ python -m pytest tests
 ---
 
 ## 🇬🇧 English
+
+[![Project page](https://img.shields.io/badge/Project_page-pxljake.com-F5A623?style=for-the-badge)](https://pxljake.com/projects/roi-tracker/)
+[![Documentation](https://img.shields.io/badge/Documentation-read-2A78D6?style=for-the-badge)](https://pxljake.com/docs/roi-tracker/en/)
 
 **When has your PV system paid for itself?** ROI Tracker calculates how much you
 **saved** by using your own solar power and **earned** by feeding into the grid –
